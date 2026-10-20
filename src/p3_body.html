@@ -1,0 +1,172 @@
+
+<canvas id="scene" aria-label="A study room with a desk and a bookshelf of journals"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<header class="hud">
+  <div class="brand"><span class="mark">Daybook</span><span class="sub" id="hudSub">Your study</span></div>
+  <nav class="hud-btns" aria-label="Room controls">
+    <button type="button" class="hb primary" id="bToday" title="Write today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3"/></svg><span>Write today</span></button>
+    <button type="button" class="hb" id="bShelf" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4v16M8 4v16M13 5l4 15M3 20h18"/></svg><span>Library</span></button>
+    <button type="button" class="hb opt-m" id="bExplore" title="Explore room tour"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg><span>Tour</span></button>
+    <button type="button" class="hb opt-m" id="bExploreFree" title="Free walk and explore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Explore</span></button>
+    <button type="button" class="hb opt-m" id="bCustomize" title="Customize study room"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span>Customize</span></button>
+    <button type="button" class="hb opt-m" id="bNew" title="Design a new journal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New journal</span></button>
+    <button type="button" class="hb icon opt-m" id="bLamp" aria-pressed="true" aria-label="Desk lamp" title="Desk lamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg></button>
+    <button type="button" class="hb icon opt-m" id="bSky" aria-label="Day or night" title="Day or night"></button>
+    <button type="button" class="hb icon" id="bSound" aria-pressed="false" aria-label="Sounds" title="Sounds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></button>
+    <button type="button" class="hb icon" id="bLock" aria-label="Lock Daybook" title="Lock Daybook" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
+  </nav>
+</header>
+<section class="pop hud-pop" id="soundPop" hidden aria-label="Sounds"></section>
+
+<section class="tour-hud" id="tourHud" hidden aria-label="Room tour"></section>
+<div class="peek-hud" id="peekHud" hidden><span>Looking outside the study window</span><button type="button" class="hb" id="peekExit"><span>Return to study</span><span class="kbd-badge">Esc</span></button></div>
+<div class="explore-hud" id="exploreHud" hidden>
+  <div class="explore-info">
+    <span class="explore-title">Free Exploration</span>
+    <span class="explore-hint">Drag or use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></span>
+  </div>
+  <div class="explore-actions">
+    <label class="explore-sens" title="Movement speed">
+      <span>Speed</span>
+      <input type="range" id="expSens" min="0.5" max="2.0" step="0.1" value="1.0" aria-label="Movement speed">
+    </label>
+    <button type="button" class="hb" id="exploreExit"><span>Exit</span><span class="kbd-badge">Esc</span></button>
+  </div>
+</div>
+<div class="arrange-hud" id="arrangeHud" hidden>
+  <div class="arrange-info">
+    <span class="arrange-title">Arrange Study Objects</span>
+    <span class="arrange-hint" id="arrangeHint">Click an object on the desk to select it</span>
+  </div>
+  <div class="arrange-controls" id="arrangeControls" hidden>
+    <span id="arrangeSelectedName" class="arrange-obj-name"></span>
+    <button type="button" class="btn sm" id="arrangeRotL" title="Rotate Left">↶ Rotate</button>
+    <button type="button" class="btn sm" id="arrangeRotR" title="Rotate Right">↷ Rotate</button>
+    <button type="button" class="btn sm" id="arrangeResetObj" title="Reset to default position">Reset</button>
+  </div>
+  <div class="arrange-actions">
+    <button type="button" class="btn sm" id="arrangeResetAll">Reset All</button>
+    <button type="button" class="btn solid sm" id="arrangeDone"><span>Done Arranging</span><span class="kbd-badge">Esc</span></button>
+  </div>
+</div>
+<div class="room-pop" id="roomActionPop" hidden aria-live="polite"></div>
+
+<p class="hint" id="hint">Setting up your study…</p>
+<div class="memory" id="memory" hidden></div>
+<div class="tip" id="tip" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="loader" id="loader"><div><i></i><p>Lighting the lamp…</p></div></div>
+
+<!-- Library -->
+<aside class="drawer" id="drawer" aria-label="Library" hidden>
+  <header class="m-head"><h2>Library</h2><button type="button" class="x" id="drClose" aria-label="Close library">&times;</button></header>
+  <div class="dtabs" role="tablist">
+    <button type="button" role="tab" data-dt="journals" aria-selected="true">Journals</button>
+    <button type="button" role="tab" data-dt="calendar" aria-selected="false">Calendar</button>
+    <button type="button" role="tab" data-dt="insights" aria-selected="false">Insights</button>
+    <button type="button" role="tab" data-dt="settings" aria-selected="false">Settings</button>
+  </div>
+  <div class="dr-body" id="drBody"></div>
+</aside>
+
+<!-- Reader -->
+<div class="reader" id="reader" hidden role="dialog" aria-modal="true" aria-labelledby="rJournal">
+  <div class="r-top">
+    <button type="button" class="hb" id="rClose" title="Back to the room"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>Room</span></button>
+    <div class="r-title"><b id="rJournal"></b><span id="rCount"></span></div>
+    <div class="r-tools">
+      <button type="button" class="hb" data-pop="pen" title="Pens and ink" aria-label="Pens and ink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3"/></svg><span>Pen</span></button>
+      <button type="button" class="hb" data-pop="paper" title="Paper" aria-label="Paper"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM9 11h7M9 15h7"/></svg><span>Paper</span></button>
+      <button type="button" class="hb" data-pop="decor" title="Photos, stickers and tape" aria-label="Decorate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.4 5 5.6.8-4 3.9 1 5.5-5-2.6-5 2.6 1-5.5-4-3.9 5.6-.8z"/></svg><span>Decorate</span></button>
+      <button type="button" class="hb" id="rDraw" aria-pressed="false" title="Draw and highlight" aria-label="Draw"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21c3 0 4-2 4-4a3 3 0 0 1 3-3l9-9a2 2 0 0 0-3-3l-9 9a3 3 0 0 1-3 3"/></svg><span>Draw</span></button>
+      <button type="button" class="hb" data-pop="tpl" title="Templates and prompts" aria-label="Templates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg><span>Templates</span></button>
+      <button type="button" class="hb" data-pop="mark" title="Bookmarks" aria-label="Bookmarks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10v18l-5-4-5 4z"/></svg><span>Bookmarks</span></button>
+      <button type="button" class="hb icon" data-pop="more" aria-label="More" title="More"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+    </div>
+  </div>
+  <div class="r-stage">
+    <div class="book" id="book">
+      <div class="spread" id="spread"></div>
+      <div class="ribbon" aria-hidden="true"></div>
+      <div class="leaf" id="leaf" aria-hidden="true"></div>
+      <div class="flap" id="flap" hidden aria-hidden="true"><div class="f-front"></div><div class="f-back"></div></div>
+    </div>
+  </div>
+  <div class="r-bottom" id="rBottom">
+    <button type="button" class="hb" id="rPrev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>Previous</span></button>
+    <div class="goal" id="goal" title="Words written today"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="g-bg" cx="18" cy="18" r="15"/><circle class="g-fg" id="goalArc" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="0 100"/></svg><span><b id="goalTxt"></b><i id="rStatus" style="font-style:normal"></i></span></div>
+    <button type="button" class="hb" id="rNext"><span>Next page</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+  </div>
+  <div class="drawbar" id="drawbar" hidden></div>
+  <section class="pop" id="pop" hidden aria-live="polite"></section>
+</div>
+
+<!-- Cover studio -->
+<div class="modal" id="designer" hidden role="dialog" aria-modal="true" aria-labelledby="dTitle">
+  <div class="panel studio">
+    <header class="m-head"><h2 id="dTitle">Cover studio</h2><div class="row"><button type="button" class="btn sm" id="dUndo" disabled>Undo</button><button type="button" class="x" id="dClose" aria-label="Close">&times;</button></div></header>
+    <div class="s-body">
+      <div class="s-stage" id="sStage"><canvas id="dSpine" width="60" height="640"></canvas><canvas id="dCanvas" width="512" height="726"></canvas><p class="s-hint" id="sHint"></p></div>
+      <div class="s-side">
+        <div class="s-tabs" role="tablist">
+          <button type="button" role="tab" data-st="style" aria-selected="true">Style</button>
+          <button type="button" role="tab" data-st="draw" aria-selected="false">Draw</button>
+          <button type="button" role="tab" data-st="photo" aria-selected="false">Photos</button>
+          <button type="button" role="tab" data-st="text" aria-selected="false">Text</button>
+          <button type="button" role="tab" data-st="sticker" aria-selected="false">Stickers</button>
+        </div>
+        <div class="s-scroll"><div class="s-sel" id="sSel" hidden></div><div id="sPane" style="display:flex;flex-direction:column;gap:18px"></div></div>
+      </div>
+    </div>
+    <footer class="m-foot"><button type="button" class="btn" id="dCancel">Cancel</button><button type="button" class="btn solid" id="dSave">Put it on the shelf</button></footer>
+  </div>
+</div>
+
+<!-- Welcome -->
+<div class="modal" id="welcome" hidden role="dialog" aria-modal="true" aria-labelledby="wTitle">
+  <div class="panel welcome">
+    <header class="m-head"><h2 id="wTitle">Welcome to your study</h2></header>
+    <div class="w-body">
+      <ul>
+        <li><i>1</i><div><b>Take a journal down</b><span>Tap a book on the shelf. Tap it again on the desk to open it.</span></div></li>
+        <li><i>2</i><div><b>Write with a real pen</b><span>Pick a fountain pen, pencil, quill or typewriter. Your words appear in ink as you type.</span></div></li>
+        <li><i>3</i><div><b>Make it yours</b><span>Design covers with drawings, photos and stickers. Add photos, tape and doodles to pages.</span></div></li>
+        <li><i>4</i><div><b>Keep the habit</b><span>Set a daily word goal, keep your streak and look back with "On this day".</span></div></li>
+      </ul>
+      <p class="note">Only you can read your journals. They are saved to your account as you write.</p>
+    </div>
+    <footer class="m-foot"><button type="button" class="btn" id="wLook">Look around</button><button type="button" class="btn accent" id="wStart">Start writing</button></footer>
+  </div>
+</div>
+
+<!-- Lock -->
+<div class="lock" id="lock" hidden role="dialog" aria-modal="true" aria-labelledby="lkTitle">
+  <div class="lk">
+    <h2 id="lkTitle">Daybook</h2>
+    <p id="lkMsg">Enter your PIN</p>
+    <div class="dots" id="lkDots"></div>
+    <div class="keys" id="lkKeys"></div>
+    <button type="button" class="lk-link" id="lkForgot" hidden>Forgot your PIN?</button>
+  </div>
+</div>
+
+<!-- Room Customizer -->
+<div class="modal" id="roomCustomModal" hidden role="dialog" aria-modal="true" aria-labelledby="rcTitle">
+  <div class="panel customizer">
+    <header class="m-head"><h2 id="rcTitle">Customize your study</h2><button type="button" class="x" id="rcClose" aria-label="Close">&times;</button></header>
+    <div class="dtabs" id="rcTabs" role="tablist">
+      <button type="button" role="tab" data-rct="presets" aria-selected="true">Presets</button>
+      <button type="button" role="tab" data-rct="walls" aria-selected="false">Walls & Floor</button>
+      <button type="button" role="tab" data-rct="furniture" aria-selected="false">Furniture & Objects</button>
+      <button type="button" role="tab" data-rct="lighting" aria-selected="false">Lighting & Weather</button>
+      <button type="button" role="tab" data-rct="window" aria-selected="false">Window & Curtains</button>
+      <button type="button" role="tab" data-rct="clock" aria-selected="false">Clock</button>
+    </div>
+    <div class="customizer-body" id="rcBody"></div>
+    <footer class="m-foot"><button type="button" class="btn solid" id="rcDone">Done</button></footer>
+  </div>
+</div>
+
+<input type="file" id="fileCover" class="sr" accept="image/*" tabindex="-1" aria-hidden="true">
+<input type="file" id="filePage" class="sr" accept="image/*" tabindex="-1" aria-hidden="true">

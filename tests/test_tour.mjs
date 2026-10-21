@@ -236,6 +236,24 @@ for (const vp of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) aw
   }
 }, { viewport: vp });
 
+// The night sky is a see-through layer just behind the glass sashes. Seen from the side, three.js drew the sashes
+// first and they hid it, so the right-hand pane showed the daytime sky at night.
+await test('the Window & Skyline stop shows the night sky through both panes at night', async page => {
+  await page.evaluate(() => { Daybook.S().sky = 'night'; Daybook.applySettings(); });
+  await page.waitForFunction(() => Daybook.R3.night === Daybook.R3.nightG, null, { timeout: 30000 });
+  await page.evaluate(i => Daybook.startRoomTour(i), STOPS.findIndex(s => s.label === 'Window & Skyline'));
+  await page.waitForFunction(() => Daybook.R3.cam.t >= 1 && document.querySelector('#tourStopTitle').textContent === 'Window & Skyline', null, { timeout: 30000 });
+  const panes = await page.evaluate(() => {
+    const R3 = Daybook.R3, gl = R3.renderer.getContext(); R3.renderer.render(R3.scene, R3.camera);
+    return [-.2, .2].map(x => {
+      const v = R3.win.localToWorld(new THREE.Vector3(x, .2, .03)).project(R3.camera), a = new Uint8Array(4);
+      gl.readPixels(Math.round((v.x + 1) / 2 * gl.drawingBufferWidth), Math.round((v.y + 1) / 2 * gl.drawingBufferHeight), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, a);
+      return [a[0], a[1], a[2]];
+    });
+  });
+  panes.forEach((c, k) => ok(.2126 * c[0] + .7152 * c[1] + .0722 * c[2] < 110, `the ${k ? 'right' : 'left'} pane shows a daytime sky at night: rgb(${c})`));
+});
+
 await browser.close();
 console.log(failed ? `\n${failed} test(s) failed` : '\nall passed');
 process.exit(failed ? 1 : 0);

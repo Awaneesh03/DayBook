@@ -173,21 +173,27 @@ function renderTourHud() {
 /* =====================================================================
    Window Peek Mode
    ===================================================================== */
-const PEEK = { active: false };
+const PEEK = { active: false, ret: null };
 function lookOutside() {
   if (!R3) return;
   closeDrawer(); closeSoundPop(); hideMemory(); closeRoomActionPop(); closeRoomCustom();
   if (TOUR.active) exitRoomTour();
+  if (R3.cam.mode === 'explore') exitFreeExplore();
+  // remember the room view so coming back lands where the visitor left (as closing the reader does)
+  if (!PEEK.active) PEEK.ret = { yaw: R3.cam.yawG, pitch: R3.cam.pitchG };
   PEEK.active = true;
   const hud = $('#peekHud'); if (hud) hud.hidden = false;
-  startCameraTransition([1.48, 1.62, -1.9], [1.48, 1.62, -8.0], 1.2, null, 'peek');
+  // the outside is a painted sky and skyline filling the 0.78 x 1 m glass: stand back, square on, to see all of it
+  // (up against the glass the camera saw a few centimetres of blurred sky behind the mullion)
+  startCameraTransition([1.48, 1.47, -.85], [1.48, 1.47, -2.0], 1.2, null, 'peek');
   toast(nightNow() ? 'Stargazing into the quiet night skyline.' : 'Gazing through the study window at the horizon.');
   sfx('flip');
 }
 function exitLookOutside() {
   PEEK.active = false;
   const hud = $('#peekHud'); if (hud) hud.hidden = true;
-  resetCameraToRoom(1.0);
+  const r = PEEK.ret; PEEK.ret = null;
+  resetCameraToRoom(1.0, null, r && r.yaw, r && r.pitch);
   sfx('click');
 }
 

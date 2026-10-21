@@ -14,10 +14,10 @@ Opened anywhere else it falls back to the browser's localStorage, so journals st
 
 **Tests:** install `playwright-core` (`npm i playwright-core`), rebuild, then run any of:
 
-- `node tests/test_transitions.mjs`: room-to-journal transitions.
+- `node tests/test_transitions.mjs`: room-to-journal transitions, the journal cover, and looking out of the window.
 - `node tests/test_weather_audio.mjs`: weather, ambience and persistence.
-- `node tests/test_stability.mjs`: room materials, hidden panels, PIN lock, custom presets, starter presets.
-- `node tests/test_tour.mjs`: the guided tour bar and its controls.
+- `node tests/test_stability.mjs`: room materials, hidden panels, PIN lock, custom presets, starter presets, text encoding.
+- `node tests/test_tour.mjs`: the guided tour bar, its controls and what its stops show.
 
 They drive Google Chrome (set `CHROME=` for another path) and need internet. `ONLY="text"` runs just the tests whose name contains the text,
 and passing a path tests another build instead of `index.html`.
@@ -29,4 +29,7 @@ and passing a path tests another build instead of `index.html`.
 - Drifting Clouds only dims the sky, and Starry Twilight looks like a clear night.
 - Changes synced from another tab or device are stored, but the room and sound only pick them up after a reload.
 - Tour stops assume the default desk layout; objects moved in arrange mode can fall outside a stop's frame.
+- On phones 460 px wide or narrower, the room view offers no way to Look outside, and the peek bar's label wraps there.
+- Entries made before the charset fix, on a page served without a charset, may hold garbled template boxes or stickers
+  (`â˜`, `ðŸŒ™`). Typed text was never affected, and nothing repairs these automatically.
 - Tested in Google Chrome only (software rendering in headless mode).

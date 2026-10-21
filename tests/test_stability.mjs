@@ -8,6 +8,7 @@ import { chromium } from 'playwright-core';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
+import http from 'node:http';
 import vm from 'node:vm';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -24,8 +25,8 @@ async function waitReady(page) {
   await page.evaluate(() => { const b = document.querySelector('#wLook'); if (b && !document.querySelector('#welcome').hidden) b.click(); });
 }
 async function reload(page) { await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }); await waitReady(page); }
-// seed: a saved library ({ lib, pages }) to place in localStorage before the first load only.
-async function fresh({ seed = null } = {}) {
+// seed: a saved library ({ lib, pages }) to place in localStorage before the first load only. url: load this instead of the file.
+async function fresh({ seed = null, url = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   ctx.setDefaultNavigationTimeout(90000);
   if (seed) await ctx.addInitScript(v => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('daybook3d:v1', v); sessionStorage.setItem('seeded', '1'); window.__seededNow = true; } }, seed);
@@ -36,7 +37,7 @@ async function fresh({ seed = null } = {}) {
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('dialog', d => { dialogs.push(d.type() + ': ' + d.message()); d.dismiss().catch(() => {}); });
-  try { await page.goto(pathToFileURL(html).href, { waitUntil: 'domcontentloaded' }); await waitReady(page); }
+  try { await page.goto(url || pathToFileURL(html).href, { waitUntil: 'domcontentloaded' }); await waitReady(page); }
   catch (e) { await ctx.close(); throw e; }
   return { ctx, page, errors, dialogs };
 }
@@ -286,6 +287,28 @@ for (const [label, presets, expectNames] of VARIANTS) {
     ok(!Array.isArray(stored) && after.text === 'Keep this entry', 'stored form or journal text wrong: ' + JSON.stringify({ stored, text: after.text }));
   }, { seed });
 }
+
+/* ---- text encoding ---- */
+// Many servers send text/html without a charset. The page has to declare UTF-8 itself, or the browser falls back to
+// windows-1252: "Pages 1–2" reads "Pages 1â€“2", and symbols the app writes into journals (template boxes, stickers) get saved garbled.
+const plain = http.createServer((q, r) => { r.writeHead(200, { 'Content-Type': 'text/html' }); r.end(fs.readFileSync(html)); });
+await new Promise(r => plain.listen(0, '127.0.0.1', r));
+await test('text, and the symbols the app saves, stay intact when a server names no charset', async page => {
+  ok(await page.evaluate(() => document.characterSet) === 'UTF-8', 'page not read as UTF-8: ' + await page.evaluate(() => document.characterSet));
+  await page.click('#bToday');
+  await page.waitForFunction(() => { const r = document.querySelector('#reader'); return !r.hidden && r.classList.contains('show') && Daybook.R3.paused; }, null, { timeout: 30000 });
+  const ui = await page.evaluate(() => { const pg = document.querySelector('.page'); return { count: document.querySelector('#rCount').textContent, num: pg.querySelector('.p-num').textContent, hint: pg._ta.placeholder, ink: pg._ink.textContent, loader: document.querySelector('#loader p').textContent }; });
+  ok(/^Pages 1–2 of \d+ · /.test(ui.count) && ui.num === '— 1 —' && ui.hint.endsWith('Start writing…') && ui.loader === 'Lighting the lamp…', 'garbled text: ' + JSON.stringify(ui));
+  ok(/^⁠+$/.test(ui.ink), 'the ink layer over an empty page should hold only invisible word joiners: ' + JSON.stringify(ui.ink));
+  await page.click('[data-pop="tpl"]');
+  await page.locator('#pop button', { hasText: 'To-do list' }).click();
+  await page.click('[data-pop="decor"]');
+  await page.locator('#pop [aria-label^="Add sticker"]').first().click();
+  await page.waitForFunction(() => Object.values(JSON.parse(localStorage.getItem('daybook3d:v1') || '{}').pages || {}).some(pg => (pg.text || '').includes('To do') && (pg.items || []).length), null, { timeout: 20000 });
+  const saved = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('daybook3d:v1')).pages).find(pg => (pg.text || '').includes('To do')));
+  ok(saved.text.includes('To do\n☐ \n☐ \n') && saved.items.some(i => (i.s || i.e || i.t) === '🌙'), 'saved garbled: ' + JSON.stringify({ text: saved.text, items: saved.items }));
+}, { url: `http://127.0.0.1:${plain.address().port}/` });
+plain.close();
 
 await browser.close();
 console.log(failed ? `\n${failed} test(s) failed` : '\nall passed');

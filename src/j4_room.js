@@ -352,6 +352,9 @@ function buildRoom() {
   const glassG = new T3.PlaneGeometry(.78, 1.0);
   const day = new T3.Mesh(glassG, new T3.MeshBasicMaterial({ map: skyDay, toneMapped: false })); day.position.z = .002; win.add(day);
   R3.nightGlass = new T3.Mesh(glassG, new T3.MeshBasicMaterial({ map: skyNight, toneMapped: false, transparent: true, opacity: 0 })); R3.nightGlass.position.z = .004; win.add(R3.nightGlass);
+  // drawn first of the see-through parts: the sashes in front write depth, and seen from the side three.js sorted them
+  // first, so the day sky showed through them at night
+  R3.nightGlass.renderOrder = -2;
   const frameMat = stdMat({ color: '#E8E2D6', roughness: .55 });
   boxM(.88, .05, .06, frameMat, 0, .525, .02, win); boxM(.88, .05, .06, frameMat, 0, -.525, .02, win);
   boxM(.05, 1.1, .06, frameMat, -.415, 0, .02, win); boxM(.05, 1.1, .06, frameMat, .415, 0, .02, win);
@@ -836,8 +839,8 @@ function frame(now) {
   if (R3.winLeft) R3.winLeft.rotation.y = -R3.winAngle;
   if (R3.winRight) R3.winRight.rotation.y = R3.winAngle;
 
-  // Curtains animation
-  R3.curtOpen += (R3.curtOpenG - R3.curtOpen) * Math.min(1, dt * 4.5);
+  // Curtains animation (a peek parts drawn curtains to see out; the saved setting is untouched, so they close again after)
+  R3.curtOpen += ((PEEK.active ? 1 : R3.curtOpenG) - R3.curtOpen) * Math.min(1, dt * 4.5);
   if (R3.curtLeft && R3.curtRight) {
     const cv = R3.curtOpen;
     R3.curtLeft.position.x = lerp(-.20, -.45, cv);

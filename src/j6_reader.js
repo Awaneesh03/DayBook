@@ -211,9 +211,10 @@ function showReader(id, n, pop) {
   if (animOn()) {
     $('.f-front', flap).style.backgroundImage = 'url(' + coverURL(j, 512) + ')';
     const back = $('.f-back', flap); back.style.backgroundColor = shade(j.cover.color, -.25); back.style.backgroundImage = 'url(' + materialURL(j.cover.color, j.cover.material) + ')';
-    flap.hidden = false; flap.className = 'flap opening'; book.classList.add('opening');
+    // reflow between the classes so the swing restarts even if a close left this animation reversed
+    flap.hidden = false; flap.className = 'flap'; void flap.offsetWidth; flap.className = 'flap opening'; book.classList.add('opening');
     setTimeout(() => sfx('flip'), 250);
-    setTimeout(() => { flap.hidden = true; flap.className = 'flap'; book.classList.remove('opening'); }, 1100);
+    clearTimeout(RD.flapT); RD.flapT = setTimeout(() => { flap.hidden = true; flap.className = 'flap'; book.classList.remove('opening'); }, 1100);
   }
   requestAnimationFrame(() => rd.classList.add('show'));
   if (R3) setTimeout(() => { if (RD.open) R3.paused = true; }, 450);
@@ -227,13 +228,14 @@ function closeReader() {
   flushAll();
   const j = curJ(); if (j && j.last !== RD.n) { j.last = RD.n; saveLib(); }
   RD.open = false; RD.closing = true; closePop(); if (RD.drawing) toggleDraw(false); RD.sel = null;
+  clearTimeout(RD.flapT); // the opening's tidy-up would hide the cover partway through this close; finish() tidies up instead
   pageEls.forEach(el => { el._pen.classList.remove('on'); });
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   const rd = $('#reader'), flap = $('#flap');
   const finish = () => {
     RD.closing = false;
     if (!RD.open) rd.classList.remove('show');
-    setTimeout(() => { if (!RD.open) { rd.hidden = true; flap.hidden = true; flap.className = 'flap'; } }, 400);
+    setTimeout(() => { if (!RD.open) { rd.hidden = true; flap.hidden = true; flap.className = 'flap'; $('#book').classList.remove('opening'); } }, 400);
     if (R3) {
       R3.paused = false;
       R3.last = performance.now();
@@ -241,7 +243,15 @@ function closeReader() {
       if (!RD.open && !opening()) { const r = R3.cam.ret; R3.cam.ret = null; resetCameraToRoom(1.0, null, r && r.yaw, r && r.pitch); }
     }
   };
-  if (animOn() && j) { $('.f-front', flap).style.backgroundImage = 'url(' + coverURL(j, 512) + ')'; flap.hidden = false; flap.className = 'flap closing'; sfx('flip'); setTimeout(finish, 650); }
+  if (animOn() && j) {
+    $('.f-front', flap).style.backgroundImage = 'url(' + coverURL(j, 512) + ')';
+    // a cover still opening falls back from where it is: the close animation starts fully open, so it would jump
+    // across to the left page and sweep back over the open journal. (Not reverse(): a swing that has not started yet
+    // rewinds to its end, the same jump. Not playbackRate =: the compositor runs this swing and would skip.)
+    const swing = !flap.hidden && flap.classList.contains('opening') && flap.getAnimations()[0];
+    if (swing) swing.updatePlaybackRate(-1); else { flap.hidden = false; flap.className = 'flap closing'; }
+    sfx('flip'); setTimeout(finish, 650);
+  }
   else finish();
   updateHudSub();
 }

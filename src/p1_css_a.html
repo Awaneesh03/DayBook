@@ -44,6 +44,8 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+/* The hidden attribute must win over component rules like .lock { display: grid }, or every closed panel stays on screen */
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0; overflow: hidden; background: var(--room); color: var(--ink); font: 14px/1.5 var(--ui);
@@ -242,7 +244,8 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
 
 /* ---------- Interactive Room Tour HUD ---------- */
 .tour-hud {
-  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 40;
+  /* centred with auto margins, not translateX(-50%): dropIn animates transform and would push it off centre */
+  position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); left: 0; right: 0; margin: 0 auto; z-index: 40;
   display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(620px, calc(100% - 32px));
   animation: dropIn .45s var(--spring) both;
 }
@@ -271,6 +274,16 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
 .tour-dot:hover:not(.active) { background: var(--glass-hi); }
 .tour-nav { display: flex; gap: 8px; align-items: center; }
 .tour-nav .hb { height: 36px; padding: 0 12px; font-size: 12.5px; }
+.tour-nav .hb svg { width: 16px; height: 16px; }
+.tour-top > .hb { height: 32px; padding: 0 12px; font-size: 12.5px; }
+@media (max-width: 520px) {
+  .tour-hud { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+  .tour-panel { padding: 12px 14px; border-radius: 16px; }
+  .tour-main { flex-wrap: wrap; }
+  .tour-main .tour-nav { width: 100%; }
+  .tour-main .tour-nav .hb { flex: 1; }
+  .tour-info b { font-size: 16px; }
+}
 .kbd-badge {
   display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
   background: rgba(255,255,255,.18); color: var(--on-scrim); font-family: monospace; margin-left: 4px;

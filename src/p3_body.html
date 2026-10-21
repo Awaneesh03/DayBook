@@ -7,7 +7,7 @@
   <nav class="hud-btns" aria-label="Room controls">
     <button type="button" class="hb primary" id="bToday" title="Write today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3"/></svg><span>Write today</span></button>
     <button type="button" class="hb" id="bShelf" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4v16M8 4v16M13 5l4 15M3 20h18"/></svg><span>Library</span></button>
-    <button type="button" class="hb opt-m" id="bExplore" title="Explore room tour"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg><span>Tour</span></button>
+    <button type="button" class="hb" id="bExplore" title="Explore room tour" aria-label="Room tour"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg><span>Tour</span></button>
     <button type="button" class="hb opt-m" id="bExploreFree" title="Free walk and explore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Explore</span></button>
     <button type="button" class="hb opt-m" id="bCustomize" title="Customize study room"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span>Customize</span></button>
     <button type="button" class="hb opt-m" id="bNew" title="Design a new journal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New journal</span></button>
@@ -19,7 +19,22 @@
 </header>
 <section class="pop hud-pop" id="soundPop" hidden aria-label="Sounds"></section>
 
-<section class="tour-hud" id="tourHud" hidden aria-label="Room tour"></section>
+<section class="tour-hud" id="tourHud" hidden aria-label="Room tour">
+  <div class="tour-panel">
+    <div class="tour-top">
+      <span class="tour-badge" id="tourCount">Stop 1 of 6</span>
+      <button type="button" class="hb" id="tourExit"><span>Exit tour</span><span class="kbd-badge">Esc</span></button>
+    </div>
+    <div class="tour-top tour-main">
+      <div class="tour-info" aria-live="polite"><b id="tourStopTitle"></b><span id="tourStopDesc"></span></div>
+      <div class="tour-nav">
+        <button type="button" class="hb" id="tourPrev" aria-label="Previous stop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>Previous</span></button>
+        <button type="button" class="hb primary" id="tourNext" aria-label="Next stop"><span>Next</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <div class="tour-dots" id="tourDots" role="group" aria-label="Tour stops"></div>
+  </div>
+</section>
 <div class="peek-hud" id="peekHud" hidden><span>Looking outside the study window</span><button type="button" class="hb" id="peekExit"><span>Return to study</span><span class="kbd-badge">Esc</span></button></div>
 <div class="explore-hud" id="exploreHud" hidden>
   <div class="explore-info">

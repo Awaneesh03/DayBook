@@ -13,7 +13,7 @@ const SETTINGS_DEFAULT = {
   showClock: true, clockMode: 'analog', clockStyle: 'daybook', clockSec: true, clockTick: false,
   weather: 'clear', woodFinish: 'satin', lampStyle: 'brass', artStyle: 'quiet_focus',
   potStyle: 'terracotta', globeStyle: 'brass', radioStyle: 'wood',
-  exploreSpeed: 1.0, activePreset: 'default', customPresets: [], objectLayout: {},
+  exploreSpeed: 1.0, activePreset: 'default', customPresets: {}, objectLayout: {},
   visibleObjects: { globe: true, plant: true, radio: true, cup: true, mug: true, art: true, clock: true }
 };
 
@@ -27,10 +27,23 @@ function normJ(j, i) {
   o.pages = Math.max(1, o.pages | 0);
   return o;
 }
+// Custom room presets are kept as { [id]: preset }. They used to be declared as an array, whose keyed entries were
+// dropped by JSON on every save, and stored data can hold anything: keep only well-formed presets, in a fresh object.
+function normPresets(v) {
+  const out = {};
+  const add = (p, id) => {
+    if (!p || typeof p !== 'object' || Array.isArray(p) || typeof id !== 'string' || !id || out[id]) return;
+    const name = typeof p.name === 'string' && p.name.trim() ? p.name.trim().slice(0, 40) : 'Custom preset';
+    out[id] = Object.assign({}, p, { id, name, desc: typeof p.desc === 'string' ? p.desc : 'Saved study configuration' });
+  };
+  if (Array.isArray(v)) v.forEach((p, i) => add(p, p && typeof p.id === 'string' && p.id ? p.id : 'custom_legacy_' + i));
+  else if (v && typeof v === 'object') Object.keys(v).forEach(k => add(v[k], k));
+  return out;
+}
 function normLib(L) {
   L = L || {};
   const settings = Object.assign({}, SETTINGS_DEFAULT, L.settings || {});
-  if (!Array.isArray(settings.customPresets)) settings.customPresets = [];
+  settings.customPresets = normPresets(settings.customPresets);
   if (typeof settings.objectLayout !== 'object' || settings.objectLayout === null) settings.objectLayout = {};
   if (typeof settings.visibleObjects !== 'object' || settings.visibleObjects === null) {
     settings.visibleObjects = Object.assign({}, SETTINGS_DEFAULT.visibleObjects);

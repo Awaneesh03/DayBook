@@ -17,6 +17,8 @@ async function fresh(opts = {}) {
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(pathToFileURL(html).href);
   await page.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone'), null, { timeout: 30000 });
+  // a first visit opens the welcome dialog ~1.4 s after boot: wait for it, then dismiss it, so it cannot pop up mid-test
+  await page.waitForFunction(() => Daybook.S().welcomed || Daybook.S().pinHash || !document.querySelector('#welcome').hidden, null, { timeout: 20000 }).catch(() => {});
   await page.evaluate(() => { const b = document.querySelector('#wLook'); if (b && !document.querySelector('#welcome').hidden) b.click(); });
   await page.waitForTimeout(300);
   return { ctx, page, errors };

@@ -53,6 +53,11 @@ function drawWall(c, W, H, base) {
   c.fillStyle = 'rgba(240,226,190,.07)';
   for (let y = 16; y < H; y += 64) for (let x = 16 + ((y / 64) % 2) * 16; x < W; x += 32) { c.beginPath(); c.moveTo(x, y - 5); c.lineTo(x + 4, y); c.lineTo(x, y + 5); c.lineTo(x - 4, y); c.fill(); }
 }
+function drawCurtain(c, W, H, col) {
+  c.fillStyle = col; c.fillRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 3) { c.fillStyle = 'rgba(0,0,0,.05)'; c.fillRect(0, y, W, 1); }
+  for (let x = 0; x < W; x += 16) { c.fillStyle = 'rgba(255,240,200,.09)'; c.fillRect(x, 0, 5, H); }
+}
 function drawSky(c, W, H, night) {
   const g = c.createLinearGradient(0, 0, 0, H);
   if (night) { g.addColorStop(0, '#040817'); g.addColorStop(.55, '#121C38'); g.addColorStop(1, '#202D4F'); }
@@ -301,7 +306,7 @@ function init3D() {
         keys: { w: false, a: false, s: false, d: false }
       }
     },
-    night: 0, nightG: 0, lamp: 1, lampG: 1,
+    night: 0, nightG: 0, nightShown: false, skyCheck: 0, lamp: 1, lampG: 1,
     winAngle: 0, winAngleG: 0,
     curtOpen: 1, curtOpenG: 1,
     lastClockDraw: 0,
@@ -383,13 +388,9 @@ function buildRoom() {
   winLeft.traverse(o => { if (o.isMesh) { o.userData.act = { type: 'window' }; R3.picks.push(o); } });
   winRight.traverse(o => { if (o.isMesh) { o.userData.act = { type: 'window' }; R3.picks.push(o); } });
 
-  // Curtains
-  const curtCol = (CURTAIN_COLORS[S().curtainColor] || CURTAIN_COLORS.ochre)[1];
-  const curtTex = tex(makeCanvas(128, 256, (c, W, H) => {
-    c.fillStyle = curtCol; c.fillRect(0, 0, W, H);
-    for (let y = 0; y < H; y += 3) { c.fillStyle = 'rgba(0,0,0,.05)'; c.fillRect(0, y, W, 1); }
-    for (let x = 0; x < W; x += 16) { c.fillStyle = 'rgba(255,240,200,.09)'; c.fillRect(x, 0, 5, H); }
-  }));
+  // Curtains: the fabric colour lives in the texture (applyRoomStyle redraws it when the colour changes)
+  R3.mats.curtKey = CURTAIN_COLORS[S().curtainColor] ? S().curtainColor : 'ochre';
+  const curtTex = tex(makeCanvas(128, 256, (c, W, H) => drawCurtain(c, W, H, CURTAIN_COLORS[R3.mats.curtKey][1])));
   const curtMat = stdMat({ map: curtTex, roughness: .95, side: T3.DoubleSide }); R3.curtMat = curtMat;
 
   const mkCurtainMesh = () => {
@@ -504,7 +505,7 @@ function buildRoom() {
   // Plant
   const plant = new T3.Group(); plant.position.set(-.3, DESK_TOP, -1.86); scn.add(plant);
   const curPot = POT_STYLES[S().potStyle] || POT_STYLES.terracotta;
-  const potMat = stdMat({ color: curPot.color, roughness: curPot.roughness, metalness: curPot.metalness || 0 }); R3.potMat = potMat;
+  const potMat = stdMat({ color: curPot.color, roughness: curPot.rough, metalness: curPot.metal || 0 }); R3.potMat = potMat;
   const pot = new T3.Mesh(new T3.CylinderGeometry(.05, .04, .075, 24), potMat); pot.position.y = .0375; pot.castShadow = true; plant.add(pot);
   const leafMat = stdMat({ color: '#3F7A4E', roughness: .6, side: T3.DoubleSide });
   for (let i = 0; i < 9; i++) {
@@ -546,15 +547,17 @@ function buildRoom() {
   globe.traverse(o => { if (o.isMesh) { o.userData.act = { type: 'globe' }; o.userData.movable = 'globe'; R3.picks.push(o); } });
   R3.movables.set('globe', { id: 'globe', group: globe, basePos: new T3.Vector3(.56, SHELF_Y[1], -1.86), baseRotY: 0, deskY: DESK_TOP });
 
-  // Lightweight Rain Particle System outside the window
+  // Lightweight Rain Particle System inside the window opening: in front of the sky planes (z -1.986) and behind
+  // the glass sashes (z -1.963). Behind the back wall (z -2) it could never be seen. x leaves room for the slant,
+  // y stays on the glass (1.0 to 2.0), so no streak shows on the wall.
   const RAIN_N = 80;
   const rainGeo = new T3.BufferGeometry();
   const rainPts = new Float32Array(RAIN_N * 6);
   const rRain = rng(77);
   for (let i = 0; i < RAIN_N; i++) {
-    const rx = 1.1 + rRain() * .76;
-    const ry = 1.0 + rRain() * 1.35;
-    const rz = -2.02 - rRain() * .14;
+    const rx = 1.23 + rRain() * .62;
+    const ry = 1.0 + rRain() * 1.0;
+    const rz = -1.982 + rRain() * .008;
     rainPts[i * 6] = rx;
     rainPts[i * 6 + 1] = ry;
     rainPts[i * 6 + 2] = rz;
@@ -564,6 +567,7 @@ function buildRoom() {
   }
   rainGeo.setAttribute('position', new T3.BufferAttribute(rainPts, 3));
   R3.rain = new T3.LineSegments(rainGeo, new T3.LineBasicMaterial({ color: 0xAAD0F5, transparent: true, opacity: .65 }));
+  R3.rain.renderOrder = -1; // drawn before the glass sashes, which are transparent and write depth, so the rain shows through them
   R3.rain.visible = (S().weather === 'rain');
   scn.add(R3.rain);
 
@@ -731,7 +735,8 @@ function resetCameraToRoom(dur, onDone, yaw, pitch) {
 }
 
 function frame(now) {
-  const dt = Math.min(.05, (now - R3.last) / 1000); R3.last = now;
+  // never negative: R3.last is also stamped from event handlers, so the next frame's timestamp can be older
+  const dt = clamp((now - R3.last) / 1000, 0, .05); R3.last = now;
   if (R3.paused) return;
   const c = R3.cam;
 
@@ -841,8 +846,13 @@ function frame(now) {
     R3.curtRight.scale.x = lerp(1.0, .45, cv);
   }
 
+  // Follow the clock: "Follow my clock" only re-reads the time when asked, so look again now and then.
+  // (This loop is already idle while the tab is hidden or the reader is open.)
+  if (state.lib && now - R3.skyCheck > 30000) { R3.skyCheck = now; if (nightNow() !== R3.nightShown) applySettings(); }
+
   // Lighting & Day/Night interpolation
-  R3.night += clamp(R3.nightG - R3.night, -dt * 1.5, dt * 1.5);
+  if (reduceMotion()) R3.night = R3.nightG;
+  else R3.night += clamp(R3.nightG - R3.night, -dt * 1.5, dt * 1.5);
   R3.lamp += clamp(R3.lampG - R3.lamp, -dt * 3, dt * 3);
   const n = R3.night;
   let l = R3.lamp;
@@ -866,8 +876,8 @@ function frame(now) {
     R3.globeSpin = Math.max(0, (R3.globeSpin || 0) - dt * 2.5);
   }
 
-  // Rain animation
-  if (R3.rain && R3.rain.visible) {
+  // Rain animation (held still when the visitor prefers reduced motion)
+  if (R3.rain && R3.rain.visible && !reduceMotion()) {
     const pos = R3.rain.geometry.attributes.position;
     const arr = pos.array;
     const dropSpeed = dt * 3.4;
@@ -876,9 +886,9 @@ function frame(now) {
       arr[(i + 1) * 3 + 1] -= dropSpeed;
       arr[i * 3] -= dropSpeed * .12;
       arr[(i + 1) * 3] -= dropSpeed * .12;
-      if (arr[(i + 1) * 3 + 1] < .92) {
-        const topY = 2.3 + Math.random() * .15;
-        const resetX = 1.1 + Math.random() * .76;
+      if (arr[(i + 1) * 3 + 1] < 1.0) {
+        const topY = 2.0 + Math.random() * .03;
+        const resetX = 1.23 + Math.random() * .62;
         arr[i * 3] = resetX;
         arr[i * 3 + 1] = topY;
         arr[(i + 1) * 3] = resetX - .008;

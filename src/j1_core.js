@@ -36,7 +36,8 @@ const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
 const easeInOutCubic = ease;
 const easeOutQuad = t => 1 - (1 - t) * (1 - t);
-const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+const reduceMotion = () => motionQuery.matches; // live, and cheap enough to call every frame
 function hashStr(s) { let x = 2166136261; for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; }
 function rng(seed) { let a = (seed >>> 0) || 1; return function () { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const newId = (p) => (p || 'j') + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -193,14 +194,19 @@ const TOUR_STOPS = [
   { id: 'window', label: 'Window & Skyline', desc: 'Looking out across the quiet rooftops under the changing sky.', pos: [1.32, 1.52, -1.35], target: [1.48, 1.5, -2.0] },
   { id: 'clock', label: 'Wall Clock', desc: 'Keeping gentle company with the rhythm of the day.', pos: [-1.02, 1.84, -1.45], target: [-1.34, 1.84, -1.97] },
   { id: 'lamp', label: 'Desk Lamp', desc: 'Solid brass with green enamel shade, casting a warm reading pool.', pos: [-.38, .78 + .38, -1.35], target: [-.6, .78 + .22, -1.74] },
-  { id: 'decor', label: 'Study Keepsakes', desc: 'The spinning globe, miniature potted greens, and vintage radio.', pos: [.32, 1.42, -1.35], target: [.44, 1.35, -1.86] }
+  // the globe (top shelf), plant and radio (desk) span about a metre each way: a three-quarter view from the right fits them
+  // above the tour bar; tall screens see far less across, so they get a wider pose
+  { id: 'decor', label: 'Study Keepsakes', desc: 'The spinning globe, miniature potted greens, and vintage radio.', pos: [.9, 1.97, -.07], target: [.05, 1.17, -1.86],
+    portrait: { pos: [1.0, 1.95, 1.15], target: [.15, 1.32, -1.86] } }
 ];
 
+// dim: least sky darkness this weather allows (0 day .. 1 night); night: only shows after dark, so it forces night.
+// ambient: the matching room ambience, only ever suggested, never started for the user.
 const WEATHER_MODES = {
-  clear: { name: 'Clear Sky', icon: '☀️' },
-  rain: { name: 'Gentle Rain', icon: '🌧️', ambient: 'rain' },
-  cloudy: { name: 'Drifting Clouds', icon: '☁️' },
-  starry: { name: 'Starry Twilight', icon: '✨' }
+  clear: { name: 'Clear Sky', icon: '☀️', dim: 0 },
+  rain: { name: 'Gentle Rain', icon: '🌧️', dim: .4, ambient: 'rain' },
+  cloudy: { name: 'Drifting Clouds', icon: '☁️', dim: .25 },
+  starry: { name: 'Starry Twilight', icon: '✨', dim: 0, night: true, ambient: 'crickets' }
 };
 
 const FINISH_STYLES = {
@@ -258,7 +264,7 @@ const STARTER_PRESETS = [
     icon: '🌧️',
     settings: {
       sky: 'night', weather: 'rain', lamp: true, lampTone: 'warm',
-      wall: 'charcoal', wood: 'dark', woodFinish: 'satin', lampStyle: 'banker',
+      wall: 'charcoal', wood: 'ebony', woodFinish: 'satin', lampStyle: 'banker',
       windowOpen: true, curtainsOpen: true, curtainColor: 'navy',
       showClock: true, clockStyle: 'roman', clockMode: 'analog'
     }

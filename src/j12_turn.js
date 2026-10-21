@@ -234,11 +234,11 @@ function applyRoomStyle() {
     [['desk', desk], ['shelf', shelf], ['floor', floor]].forEach(([k, t]) => { const m = R3.mats[k]; if (!m) return; if (m.map) m.map.dispose(); m.map = t; m.needsUpdate = true; });
   }
 
-  // Wood Finish
+  // Wood Finish (FINISH_STYLES and POT_STYLES store rough/metal; reading roughness/metalness gave undefined, which renders black)
   if (typeof FINISH_STYLES !== 'undefined') {
     const fin = FINISH_STYLES[st.woodFinish] || FINISH_STYLES.satin;
-    if (R3.mats.desk) { R3.mats.desk.roughness = fin.roughness; R3.mats.desk.metalness = fin.metalness; R3.mats.desk.needsUpdate = true; }
-    if (R3.mats.shelf) { R3.mats.shelf.roughness = fin.roughness; R3.mats.shelf.metalness = fin.metalness; R3.mats.shelf.needsUpdate = true; }
+    if (R3.mats.desk) { R3.mats.desk.roughness = fin.rough; R3.mats.desk.metalness = fin.metal; R3.mats.desk.needsUpdate = true; }
+    if (R3.mats.shelf) { R3.mats.shelf.roughness = fin.rough; R3.mats.shelf.metalness = fin.metal; R3.mats.shelf.needsUpdate = true; }
   }
 
   // Lamp tone & styles
@@ -269,14 +269,14 @@ function applyRoomStyle() {
     const ps = POT_STYLES[st.potStyle] || POT_STYLES.terracotta;
     if (R3.potMat) {
       R3.potMat.color.set(ps.color);
-      R3.potMat.roughness = ps.roughness;
-      R3.potMat.metalness = ps.metalness || 0;
+      R3.potMat.roughness = ps.rough;
+      R3.potMat.metalness = ps.metal || 0;
       R3.potMat.needsUpdate = true;
     }
     if (R3.shelfPotMat) {
       R3.shelfPotMat.color.set(ps.color);
-      R3.shelfPotMat.roughness = ps.roughness;
-      R3.shelfPotMat.metalness = ps.metalness || 0;
+      R3.shelfPotMat.roughness = ps.rough;
+      R3.shelfPotMat.metalness = ps.metal || 0;
       R3.shelfPotMat.needsUpdate = true;
     }
   }
@@ -292,24 +292,19 @@ function applyRoomStyle() {
   }
 
   // Weather & Atmosphere
-  const wMode = st.weather || 'clear';
-  if (R3.rain) {
-    R3.rain.visible = (wMode === 'rain');
-  }
-  if (wMode === 'starry') {
-    R3.nightG = 1;
-  } else if (wMode === 'rain') {
-    R3.nightG = Math.max(R3.nightG, 0.4);
-  } else if (wMode === 'cloudy') {
-    R3.nightG = Math.max(R3.nightG, 0.25);
-  }
+  applyWeather();
 
   // Window & Curtains
   R3.winAngleG = st.windowOpen ? 1.05 : 0;
   R3.curtOpenG = st.curtainsOpen !== false ? 1 : 0;
   if (R3.curtMat && typeof CURTAIN_COLORS !== 'undefined') {
-    const cc = CURTAIN_COLORS[st.curtainColor] || CURTAIN_COLORS.ochre;
-    R3.curtMat.color.setHex(cc.color);
+    // entries are [name, colour, shade]; the old code tinted the material with entry.color (undefined), i.e. black
+    const key = CURTAIN_COLORS[st.curtainColor] ? st.curtainColor : 'ochre';
+    if (R3.mats.curtKey !== key) {
+      R3.mats.curtKey = key;
+      const t = tex(makeCanvas(128, 256, (c, W, H) => drawCurtain(c, W, H, CURTAIN_COLORS[key][1])));
+      if (R3.curtMat.map) R3.curtMat.map.dispose(); R3.curtMat.map = t; R3.curtMat.needsUpdate = true;
+    }
   }
 
   // Clock

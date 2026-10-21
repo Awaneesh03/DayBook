@@ -38,7 +38,7 @@ function wireUI() {
 
   const bCust = $('#bCustomize'); if (bCust) bCust.addEventListener('click', () => openRoomCustom('presets'));
   const tPrev = $('#tourPrev'); if (tPrev) tPrev.addEventListener('click', prevTourStop);
-  const tNext = $('#tourNext'); if (tNext) tNext.addEventListener('click', nextTourStop);
+  const tNext = $('#tourNext'); if (tNext) tNext.addEventListener('click', tourNextButton);
   const tExit = $('#tourExit'); if (tExit) tExit.addEventListener('click', exitRoomTour);
   const pExit = $('#peekExit'); if (pExit) pExit.addEventListener('click', exitLookOutside);
   const rcCl = $('#rcClose'); if (rcCl) rcCl.addEventListener('click', closeRoomCustom);
@@ -74,7 +74,7 @@ function wireUI() {
       if (!RD.open && cancelOpen()) return;
       if (R3 && R3.arrange && R3.arrange.active) { exitArrangeMode(); return; }
       if (R3 && R3.cam && R3.cam.mode === 'explore') { exitFreeExplore(); return; }
-      if (typeof TOUR !== 'undefined' && TOUR.active) { exitRoomTour(); return; }
+      if (typeof TOUR !== 'undefined' && TOUR.active && !tourCovered()) { exitRoomTour(); return; } // else close what covers it first
       if (typeof PEEK !== 'undefined' && PEEK.active) { exitLookOutside(); return; }
       if (!$('#roomActionPop').hidden) { closeRoomActionPop(); return; }
       if (!$('#roomCustomModal').hidden) { closeRoomCustom(); return; }
@@ -100,7 +100,7 @@ function wireUI() {
       if (e.key === '[' || e.key === '{') { rotateArrangeObject(-1); }
       if (e.key === ']' || e.key === '}') { rotateArrangeObject(1); }
       if (e.key.toLowerCase() === 'r') { resetObjectLayout(); }
-    } else if (typeof TOUR !== 'undefined' && TOUR.active) {
+    } else if (typeof TOUR !== 'undefined' && TOUR.active && !tourCovered()) {
       if (e.key === 'ArrowRight') { nextTourStop(); return; }
       if (e.key === 'ArrowLeft') { prevTourStop(); return; }
     } else if (RD.open && $('#designer').hidden) {
@@ -124,6 +124,7 @@ function wireUI() {
     if (document.visibilityState === 'hidden') { flushAll(); LK.hiddenAt = Date.now(); }
     else if (S().pinHash && LK.hiddenAt && Date.now() - LK.hiddenAt > 180000) showLock();
     if (R3) { R3.paused = document.visibilityState === 'hidden' || RD.open; R3.last = performance.now(); }
+    ambientVisibility(document.visibilityState === 'hidden');
   });
   window.addEventListener('pagehide', () => flushAll());
 }
@@ -155,6 +156,7 @@ async function boot() {
   state.lib.journals.forEach(j => artMids(j).forEach(loadMedia));
 
   applySettings(); applyRoomStyle(); sync3D();
+  SND.mode = AMBIENTS[S().ambient] ? S().ambient : 'off'; syncSoundUI(); armResume(); // saved ambience resumes on the first click or key
   if (R3) R3.booted = true;
   updateHudSub();
   $('#loader').classList.add('gone');
@@ -176,7 +178,8 @@ async function boot() {
     openRoomCustom, closeRoomCustom,
     openJournal, takeDown, closeReader, writeToday,
     openDrawer, closeDrawer,
-    applyRoomStyle, applySettings, sfx, toast
+    applyRoomStyle, applySettings, sfx, toast,
+    SND, setAmbient, cycleSound, weatherMode, skyTarget
   };
 }
 boot();

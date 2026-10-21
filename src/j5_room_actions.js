@@ -62,11 +62,29 @@ function writeToday() {
 }
 
 function skyIsNight() { const s = S().sky; if (s === 'night') return true; if (s === 'day') return false; const hr = new Date().getHours(); return hr < 6 || hr >= 19; }
+// Weather: the day/night setting says how dark it is, the weather can only deepen that, so every path
+// (weather chips, presets, sky toggle, clock) lands on the same sky instead of whichever ran last.
+function weatherMode() { const w = S().weather; return WEATHER_MODES[w] ? w : 'clear'; }
+function skyTarget() { const w = WEATHER_MODES[weatherMode()]; return w.night ? 1 : Math.max(skyIsNight() ? 1 : 0, w.dim || 0); }
+const nightNow = () => skyTarget() >= .5;
+function applyWeather() {
+  if (!R3 || !R3.rain) return;
+  R3.rain.visible = weatherMode() === 'rain';
+  R3.nightG = skyTarget(); R3.nightShown = nightNow();
+  if (!R3.booted || reduceMotion()) R3.night = R3.nightG; // no fade on load or when motion is reduced
+}
+// A daytime choice ends Starry Twilight, which only exists at night.
+function setSkyMode(v) {
+  const st = state.lib.settings; st.sky = v;
+  if (WEATHER_MODES[weatherMode()].night && !skyIsNight()) { st.weather = 'clear'; toast('Starry Twilight ended with the daylight.'); }
+  saveLib(); applySettings();
+}
 const SUN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
 const MOON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
 function applySettings() {
-  const night = skyIsNight(); const lampOn = S().lamp !== false;
-  if (R3) { R3.nightG = night ? 1 : 0; R3.lampG = lampOn ? 1 : 0; if (!R3.booted) { R3.night = R3.nightG; R3.lamp = R3.lampG; } }
+  const night = nightNow(); const lampOn = S().lamp !== false;
+  applyWeather();
+  if (R3) { R3.lampG = lampOn ? 1 : 0; if (!R3.booted) R3.lamp = R3.lampG; }
   $('#bLamp').setAttribute('aria-pressed', lampOn ? 'true' : 'false'); $('#bLamp').setAttribute('aria-label', lampOn ? 'Switch the lamp off' : 'Switch the lamp on');
   const sb = $('#bSky'); sb.setAttribute('aria-label', night ? 'Switch to daytime' : 'Switch to night'); sb.innerHTML = night ? SUN_SVG : MOON_SVG;
   $('#bLock').hidden = !S().pinHash;
@@ -76,7 +94,7 @@ function toggleLamp() {
   if (on && R3) R3.flickerUntil = performance.now() + 550;
   sfx('click');
 }
-function toggleSky() { if (!state.lib) return; state.lib.settings.sky = skyIsNight() ? 'day' : 'night'; saveLib(); applySettings(); }
+function toggleSky() { if (state.lib) setSkyMode(nightNow() ? 'day' : 'night'); }
 function updateHudSub() {
   if (!state.lib) return;
   const st = currentStreak(), w = wordsToday(), g = S().goal;
@@ -97,46 +115,59 @@ function fadeHint() { $('#hint').classList.add('fade'); }
 const TOUR = { active: false, index: 0 };
 function startRoomTour(idx) {
   if (!R3) return;
-  closeDrawer(); closeSoundPop(); hideMemory(); closeRoomActionPop(); closeRoomCustom();
+  closeDrawer(); closeSoundPop(); hideMemory(); closeRoomActionPop(); closeRoomCustom(); fadeHint();
   if (PEEK.active) exitLookOutside();
+  if (R3.cam.mode === 'explore') exitFreeExplore();
+  if (R3.arrange && R3.arrange.active) exitArrangeMode();
   TOUR.active = true;
-  const hud = $('#tourHud'); if (hud) hud.hidden = false;
+  $('#tourHud').hidden = false;
   goToTourStop(typeof idx === 'number' ? idx : 0);
   sfx('flip');
+  // keyboard users land on Next; leaving the tour hands focus back to the Tour button
+  requestAnimationFrame(() => { if (TOUR.active) $('#tourNext').focus({ preventScroll: true }); });
 }
 function exitRoomTour() {
+  const hud = $('#tourHud'), hadFocus = hud.contains(document.activeElement);
   TOUR.active = false;
-  const hud = $('#tourHud'); if (hud) hud.hidden = true;
+  hud.hidden = true;
+  if (hadFocus) { const b = $('#bExplore'); if (b.offsetParent) b.focus({ preventScroll: true }); else document.activeElement.blur(); }
   resetCameraToRoom(1.0);
   sfx('click');
 }
 function goToTourStop(idx) {
   if (!TOUR_STOPS || !TOUR_STOPS.length) return;
-  TOUR.index = ((idx % TOUR_STOPS.length) + TOUR_STOPS.length) % TOUR_STOPS.length;
+  TOUR.index = clamp(idx | 0, 0, TOUR_STOPS.length - 1); // the first and last stops are ends, not a loop
   const s = TOUR_STOPS[TOUR.index];
-  startCameraTransition(s.cam, s.look, 1.25, null, 'tour');
+  const v = s.portrait && innerWidth / innerHeight < .85 ? s.portrait : s; // a stop may carry a wider pose for tall screens
+  startCameraTransition(v.pos, v.target, 1.25, null, 'tour'); // TOUR_STOPS entries hold pos/target/label
   renderTourHud();
 }
-function nextTourStop() { goToTourStop(TOUR.index + 1); sfx('flip'); }
-function prevTourStop() { goToTourStop(TOUR.index - 1); sfx('flip'); }
+const tourAtEnd = () => TOUR.index >= TOUR_STOPS.length - 1;
+function nextTourStop() { if (tourAtEnd()) return; goToTourStop(TOUR.index + 1); sfx('flip'); }
+function prevTourStop() { if (TOUR.index <= 0) return; goToTourStop(TOUR.index - 1); sfx('flip'); }
+// The Next button becomes Finish on the last stop; the arrow key just stops there.
+function tourNextButton() { if (tourAtEnd()) exitRoomTour(); else nextTourStop(); }
+// Tour keys stand down while something else is open on top: library, sounds panel, a room pop-up, a dialog.
+const tourCovered = () => isOverlayActive() || !$('#soundPop').hidden || !$('#roomActionPop').hidden;
 function renderTourHud() {
   const s = TOUR_STOPS[TOUR.index]; if (!s) return;
-  const tit = $('#tourStopTitle'), desc = $('#tourStopDesc'), cnt = $('#tourCount'), dots = $('#tourDots');
-  if (tit) tit.textContent = s.title;
-  if (desc) desc.textContent = s.desc;
-  if (cnt) cnt.textContent = 'Stop ' + (TOUR.index + 1) + ' of ' + TOUR_STOPS.length;
-  if (dots) {
-    dots.textContent = '';
-    TOUR_STOPS.forEach((st, i) => {
-      const d = h('button', {
-        type: 'button',
-        class: 'tour-dot' + (i === TOUR.index ? ' active' : ''),
-        'aria-label': 'Go to ' + st.title,
-        onclick: () => { goToTourStop(i); sfx('click'); }
-      });
-      dots.append(d);
-    });
-  }
+  const prev = $('#tourPrev'), next = $('#tourNext'), dots = $('#tourDots');
+  const prevFocused = document.activeElement === prev, dotFocused = dots.contains(document.activeElement);
+  $('#tourStopTitle').textContent = s.label;
+  $('#tourStopDesc').textContent = s.desc;
+  $('#tourCount').textContent = 'Stop ' + (TOUR.index + 1) + ' of ' + TOUR_STOPS.length;
+  prev.disabled = TOUR.index === 0;
+  $('span', next).textContent = tourAtEnd() ? 'Finish' : 'Next';
+  next.setAttribute('aria-label', tourAtEnd() ? 'Finish the tour' : 'Next stop');
+  dots.textContent = '';
+  TOUR_STOPS.forEach((st, i) => dots.append(h('button', {
+    type: 'button', class: 'tour-dot' + (i === TOUR.index ? ' active' : ''),
+    'aria-label': 'Stop ' + (i + 1) + ': ' + st.label, 'aria-current': i === TOUR.index ? 'step' : null,
+    onclick: () => { goToTourStop(i); sfx('click'); }
+  })));
+  // keep keyboard focus in the bar when its focused control is disabled or redrawn
+  if (prevFocused && prev.disabled) next.focus({ preventScroll: true });
+  if (dotFocused) dots.children[TOUR.index].focus({ preventScroll: true });
 }
 
 /* =====================================================================
@@ -150,7 +181,7 @@ function lookOutside() {
   PEEK.active = true;
   const hud = $('#peekHud'); if (hud) hud.hidden = false;
   startCameraTransition([1.48, 1.62, -1.9], [1.48, 1.62, -8.0], 1.2, null, 'peek');
-  toast(skyIsNight() ? 'Stargazing into the quiet night skyline.' : 'Gazing through the study window at the horizon.');
+  toast(nightNow() ? 'Stargazing into the quiet night skyline.' : 'Gazing through the study window at the horizon.');
   sfx('flip');
 }
 function exitLookOutside() {
@@ -276,15 +307,12 @@ function selectArrangeObject(id) {
 }
 
 function updateArrangeHudSelection() {
-  const nameEl = $('#arrangeObjName');
-  if (!nameEl) return;
-  const id = R3.arrange.selected;
-  if (!id) {
-    nameEl.textContent = 'None';
-    return;
-  }
+  const id = R3 && R3.arrange.selected;
+  const ctrls = $('#arrangeControls'); if (ctrls) ctrls.hidden = !id; // rotate and reset only apply to a selected object
+  const nameEl = $('#arrangeSelectedName');
+  if (!nameEl || !id) return;
   const meta = (typeof MOVABLE_OBJECTS !== 'undefined' && MOVABLE_OBJECTS[id]) || {};
-  nameEl.textContent = meta.label || (id.charAt(0).toUpperCase() + id.slice(1));
+  nameEl.textContent = meta.name || (id.charAt(0).toUpperCase() + id.slice(1));
 }
 
 function rotateArrangeObject(dir) {
@@ -423,8 +451,7 @@ function renameCustomPreset(pId, newName) {
 
 function deleteCustomPreset(pId) {
   if (!state.lib || !S().customPresets || !S().customPresets[pId]) return;
-  const p = S().customPresets[pId];
-  if (!confirm('Are you sure you want to delete the preset "' + p.name + '"?')) return;
+  // asked for confirmation in the preset card itself: native confirm() is blocked in sandboxed frames
   delete state.lib.settings.customPresets[pId];
   if (state.lib.settings.activePreset === pId) {
     state.lib.settings.activePreset = 'custom';
@@ -521,8 +548,10 @@ function closeRoomActionPop() {
    Room Customizer Modal
    ===================================================================== */
 let rcCurTab = 'presets';
+let rcPresetEdit = null; // { id, mode: 'rename' | 'delete' } while a custom preset card asks for a name or a confirmation
 function openRoomCustom(tab) {
   if (!state.ready) return;
+  rcPresetEdit = null;
   closeDrawer(); closeSoundPop(); closeRoomActionPop();
   if (TOUR.active) exitRoomTour();
   if (PEEK.active) exitLookOutside();
@@ -534,6 +563,7 @@ function closeRoomCustom() {
   const modal = $('#roomCustomModal'); if (modal) modal.hidden = true;
 }
 function renderRoomCustom() {
+  if (rcCurTab !== 'presets') rcPresetEdit = null;
   const tabs = $$('#rcTabs button');
   tabs.forEach(btn => {
     const active = btn.getAttribute('data-rct') === rcCurTab;
@@ -575,32 +605,32 @@ function renderRoomCustom() {
       customList.length ? h('div', { class: 'presets-grid' },
         customList.map(p => {
           const isAct = st.activePreset === p.id;
+          // rename and delete ask inside the card: prompt() and confirm() are blocked in sandboxed frames
+          const mode = rcPresetEdit && rcPresetEdit.id === p.id ? rcPresetEdit.mode : null;
+          const edit = m => { rcPresetEdit = m ? { id: p.id, mode: m } : null; renderRoomCustom(); };
+          let title = h('span', { class: 'preset-card-title', text: p.name }), actions;
+          if (mode === 'rename') {
+            title = h('input', { type: 'text', class: 'inp', value: p.name, maxlength: '40', 'aria-label': 'New name for ' + p.name });
+            const save = () => { if (!title.value.trim()) { toast('Please type a preset name.'); return; } rcPresetEdit = null; renameCustomPreset(p.id, title.value); };
+            title.addEventListener('keydown', e => { if (e.key === 'Enter') save(); else if (e.key === 'Escape') { e.stopPropagation(); edit(null); } });
+            requestAnimationFrame(() => { title.focus(); title.select(); });
+            actions = [h('button', { type: 'button', class: 'btn sm solid', onclick: save }, 'Save name'), h('button', { type: 'button', class: 'btn sm', onclick: () => edit(null) }, 'Cancel')];
+          } else if (mode === 'delete') {
+            actions = [h('div', { class: 'confirm' }, h('p', { text: 'Delete “' + p.name + '”? This cannot be undone.' }),
+              h('div', { class: 'row' },
+                h('button', { type: 'button', class: 'btn sm danger solid', onclick: () => { rcPresetEdit = null; deleteCustomPreset(p.id); } }, 'Delete for good'),
+                h('button', { type: 'button', class: 'btn sm', onclick: () => edit(null) }, 'Keep it')))];
+          } else {
+            actions = [
+              h('button', { type: 'button', class: 'btn sm' + (isAct ? ' solid' : ' prim'), onclick: () => applyPreset(p.id) }, 'Apply'),
+              h('button', { type: 'button', class: 'btn sm', onclick: () => edit('rename') }, 'Rename'),
+              h('button', { type: 'button', class: 'btn sm', onclick: () => edit('delete') }, 'Delete')
+            ];
+          }
           return h('div', { class: 'preset-card' + (isAct ? ' active' : '') },
-            h('div', { class: 'preset-card-head' },
-              h('span', { class: 'preset-card-title', text: p.name }),
-              isAct ? h('span', { class: 'preset-badge', text: 'Active' }) : null
-            ),
+            h('div', { class: 'preset-card-head' }, title, isAct ? h('span', { class: 'preset-badge', text: 'Active' }) : null),
             h('p', { class: 'preset-card-desc', text: p.desc || 'Custom configuration' }),
-            h('div', { class: 'preset-card-actions' },
-              h('button', {
-                type: 'button',
-                class: 'btn sm' + (isAct ? ' solid' : ' prim'),
-                onclick: () => applyPreset(p.id)
-              }, 'Apply'),
-              h('button', {
-                type: 'button',
-                class: 'btn sm',
-                onclick: () => {
-                  const nn = prompt('Enter new name for preset:', p.name);
-                  if (nn) renameCustomPreset(p.id, nn);
-                }
-              }, 'Rename'),
-              h('button', {
-                type: 'button',
-                class: 'btn sm',
-                onclick: () => deleteCustomPreset(p.id)
-              }, 'Delete')
-            )
+            h('div', { class: 'preset-card-actions' }, actions)
           );
         })
       ) : h('p', { class: 'note', text: 'No custom configurations saved yet.' })
@@ -737,12 +767,21 @@ function renderRoomCustom() {
       const wOpts = Object.fromEntries(Object.keys(WEATHER_MODES).map(k => [k, WEATHER_MODES[k].name]));
       body.append(h('div', { class: 'rc-field-col' },
         h('p', { class: 'eyebrow', text: 'Weather & Atmosphere' }),
-        chipRow(h('div', { class: 'chips' }), wOpts, st.weather || 'clear', k => {
+        chipRow(h('div', { class: 'chips' }), wOpts, weatherMode(), k => {
           st.weather = k;
-          saveLib(); applyRoomStyle(); renderRoomCustom();
-          const wDesc = (WEATHER_MODES[k] || {}).desc || k;
-          toast('Weather: ' + wDesc);
+          saveLib(); applySettings(); renderRoomCustom();
+          const am = weatherAmbience();
+          toast('Weather: ' + WEATHER_MODES[k].name + (am ? ' · Try “' + AMBIENTS[am] + '” in Sounds' : ''));
         })
+      ));
+      // Offer the matching ambience; it only plays if the visitor asks for it.
+      const am = weatherAmbience();
+      if (am) body.append(h('div', { class: 'rc-field' },
+        h('div', { class: 'rc-field-info' },
+          h('span', { class: 'rc-field-title', text: 'Pair with the weather' }),
+          h('span', { class: 'rc-field-desc', text: 'Your current ambience stays as it is until you choose.' })
+        ),
+        h('button', { type: 'button', class: 'btn', onclick: () => { setAmbient(am); renderRoomCustom(); } }, 'Play “' + AMBIENTS[am] + '”')
       ));
     }
 
@@ -750,18 +789,18 @@ function renderRoomCustom() {
     body.append(h('div', { class: 'rc-field' },
       h('div', { class: 'rc-field-info' },
         h('span', { class: 'rc-field-title', text: 'Sync Sky with Local Time' }),
-        h('span', { class: 'rc-field-desc', text: st.autoSky ? 'Automatically adapts daylight and night stars to your local clock' : 'Manual sky mode' })
+        h('span', { class: 'rc-field-desc', text: st.sky === 'auto' ? 'Automatically adapts daylight and night stars to your local clock' : 'Manual sky mode' })
       ),
       h('button', {
         type: 'button',
         class: 'switch',
         role: 'switch',
-        'aria-checked': st.autoSky ? 'true' : 'false',
+        'aria-checked': st.sky === 'auto' ? 'true' : 'false',
         'aria-label': 'Sync sky with local time',
         onclick: () => {
-          st.autoSky = !st.autoSky;
-          saveLib(); applySettings(); renderRoomCustom();
-          toast(st.autoSky ? 'Sky synchronized with local time.' : 'Manual sky control active.');
+          setSkyMode(st.sky === 'auto' ? (skyIsNight() ? 'night' : 'day') : 'auto');
+          renderRoomCustom();
+          toast(st.sky === 'auto' ? 'Sky synchronized with local time.' : 'Manual sky control active.');
         }
       })
     ));
@@ -770,13 +809,13 @@ function renderRoomCustom() {
     body.append(h('div', { class: 'rc-field' },
       h('div', { class: 'rc-field-info' },
         h('span', { class: 'rc-field-title', text: 'Day / Night Override' }),
-        h('span', { class: 'rc-field-desc', text: skyIsNight() ? 'Currently Night (Starlight & City Glow)' : 'Currently Day (Sunlight & Horizon)' })
+        h('span', { class: 'rc-field-desc', text: nightNow() ? 'Currently Night (Starlight & City Glow)' : 'Currently Day (Sunlight & Horizon)' })
       ),
       h('button', {
         type: 'button',
         class: 'btn',
         onclick: () => { toggleSky(); renderRoomCustom(); }
-      }, skyIsNight() ? 'Switch to Day' : 'Switch to Night')
+      }, nightNow() ? 'Switch to Day' : 'Switch to Night')
     ));
 
     // Desk Lamp
@@ -834,7 +873,7 @@ function renderRoomCustom() {
     ));
 
     const curKeys = Object.keys(CURTAIN_COLORS);
-    const curOpts = Object.fromEntries(curKeys.map(k => [k, CURTAIN_COLORS[k].name]));
+    const curOpts = Object.fromEntries(curKeys.map(k => [k, CURTAIN_COLORS[k][0]]));
     body.append(h('div', { class: 'rc-field-col' },
       h('p', { class: 'eyebrow', text: 'Curtain fabric & tone' }),
       chipRow(h('div', { class: 'chips' }), curOpts, st.curtainColor || 'ochre', k => { setCurtainColor(k); renderRoomCustom(); })
@@ -1066,27 +1105,38 @@ window.handleRoomObjectAction = function(a) {
 /* =====================================================================
    Sound: ambience and pen sounds (all generated, no files)
    ===================================================================== */
-const SND = { ctx: null, mode: 'off', nodes: [], timers: [] };
+const SND = { ctx: null, mode: 'off', voice: null, hidden: document.visibilityState === 'hidden' };
 const AMBIENTS = { off: 'Quiet', rain: 'Rain on the window', fire: 'Crackling fireplace', ocean: 'Ocean waves', crickets: 'Summer night', cafe: 'Café murmur' };
+// Ambience has its own master gain, scaled by the volume setting (the default .6 keeps the old .8 level).
+const ambientLevel = () => clamp(+S().volume || 0, 0, 1) * 1.3;
+function applyAmbientVolume() { if (SND.master) SND.master.gain.setTargetAtTime(ambientLevel(), SND.ctx.currentTime, .04); }
+// Browsers keep audio suspended until the visitor interacts (and after a hidden tab or an interruption).
+function wake() {
+  const c = SND.ctx; if (!c || c.state === 'running' || c.state === 'closed') return;
+  try { const p = c.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* needs a gesture */ }
+  armResume(); // a blocked resume() can stay pending, so also retry on the next click or key
+}
 function audio() {
-  if (SND.ctx) { if (SND.ctx.state === 'suspended') SND.ctx.resume(); return SND.ctx; }
+  if (SND.ctx) { wake(); return SND.ctx; }
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
   try {
     SND.ctx = new AC();
     const len = SND.ctx.sampleRate * 4;
     const mk = brown => { const buf = SND.ctx.createBuffer(1, len, SND.ctx.sampleRate), d = buf.getChannelData(0); let last = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; if (brown) { last = (last + .02 * w) / 1.02; d[i] = last * 3.5; } else d[i] = w; } return buf; };
     SND.white = mk(false); SND.brown = mk(true);
-    SND.master = SND.ctx.createGain(); SND.master.gain.value = .8; SND.master.connect(SND.ctx.destination);
+    SND.master = SND.ctx.createGain(); SND.master.gain.value = ambientLevel(); SND.master.connect(SND.ctx.destination);
     SND.penGain = SND.ctx.createGain(); SND.penGain.gain.value = S().volume; SND.penGain.connect(SND.ctx.destination);
+    SND.ctx.onstatechange = () => { if (SND.ctx.state !== 'running' && !SND.hidden) armResume(); };
   } catch (e) { SND.ctx = null; }
   return SND.ctx;
 }
-function loopNoise(brown, type, freq, gain, lfo) {
+// An ambience is a "voice": its own gain, looping sources and timers, so it can be faded and torn down as one.
+function loopNoise(v, brown, type, freq, gain, lfo) {
   const c = SND.ctx; const src = c.createBufferSource(); src.buffer = brown ? SND.brown : SND.white; src.loop = true;
   const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; const g = c.createGain(); g.gain.value = 0;
   g.gain.linearRampToValueAtTime(gain, c.currentTime + 1.5);
-  src.connect(f); f.connect(g); g.connect(SND.master); src.start(); SND.nodes.push(src, f, g);
-  if (lfo) { const o = c.createOscillator(); o.frequency.value = lfo; const og = c.createGain(); og.gain.value = gain * .8; o.connect(og); og.connect(g.gain); o.start(); SND.nodes.push(o, og); }
+  src.connect(f); f.connect(g); g.connect(v.g); src.start(); v.nodes.push(src, f, g);
+  if (lfo) { const o = c.createOscillator(); o.frequency.value = lfo; const og = c.createGain(); og.gain.value = gain * .8; o.connect(og); og.connect(g.gain); o.start(); v.nodes.push(o, og); }
 }
 function burst(freq, q, dur, gain, type, out) {
   const c = SND.ctx; if (!c) return; const src = c.createBufferSource(); src.buffer = SND.white;
@@ -1099,30 +1149,84 @@ function tone(freq, dur, gain, out, type) {
   const g = c.createGain(); const t = c.currentTime; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + .005); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
   o.connect(g); g.connect(out || SND.master); o.start(t); o.stop(t + dur + .05);
 }
-function stopSound() { SND.nodes.forEach(n => { try { if (n.stop) n.stop(); n.disconnect(); } catch (e) { /* stopped */ } }); SND.nodes = []; SND.timers.forEach(t => clearInterval(t)); SND.timers = []; }
-function setAmbient(next) {
-  if (next !== 'off' && !audio()) { toast('Sound is not available in this browser.'); return; }
-  stopSound(); SND.mode = next;
-  if (next === 'rain') {
-    loopNoise(false, 'lowpass', 1500, .16); loopNoise(true, 'lowpass', 380, .32);
-    SND.timers.push(setInterval(() => { if (Math.random() < .7) burst(2500 + Math.random() * 3500, 2.5, .05, .05 + Math.random() * .06); }, 70));
-  } else if (next === 'fire') {
-    loopNoise(true, 'lowpass', 520, .5);
-    SND.timers.push(setInterval(() => { if (Math.random() < .45) burst(1500 + Math.random() * 4500, .8, .01 + Math.random() * .03, .1 + Math.random() * .3, 'highpass'); }, 55));
-  } else if (next === 'ocean') {
-    loopNoise(true, 'lowpass', 700, .45, .085); loopNoise(false, 'highpass', 2500, .05, .085);
-  } else if (next === 'crickets') {
-    loopNoise(true, 'lowpass', 300, .18);
-    SND.timers.push(setInterval(() => { if (Math.random() < .55) { const f = 4200 + Math.random() * 600; for (let k = 0; k < 3; k++) setTimeout(() => tone(f, .035, .025), k * 45); } }, 380));
-  } else if (next === 'cafe') {
-    loopNoise(true, 'bandpass', 420, .35); loopNoise(false, 'lowpass', 900, .05);
-    SND.timers.push(setInterval(() => { if (Math.random() < .08) { tone(2600 + Math.random() * 1500, .25, .03); tone(3900 + Math.random() * 800, .2, .015); } }, 400));
+const every = (v, ms, fn) => v.timers.push(setInterval(fn, ms));
+function buildAmbient(mode) {
+  const c = SND.ctx, g = c.createGain(); g.gain.value = 0; g.connect(SND.master);
+  const v = { g, nodes: [g], timers: [], dead: false };
+  if (mode === 'rain') {
+    loopNoise(v, false, 'lowpass', 1500, .16); loopNoise(v, true, 'lowpass', 380, .32);
+    every(v, 70, () => { if (Math.random() < .7) burst(2500 + Math.random() * 3500, 2.5, .05, .05 + Math.random() * .06, null, g); });
+  } else if (mode === 'fire') {
+    loopNoise(v, true, 'lowpass', 520, .5);
+    every(v, 55, () => { if (Math.random() < .45) burst(1500 + Math.random() * 4500, .8, .01 + Math.random() * .03, .1 + Math.random() * .3, 'highpass', g); });
+  } else if (mode === 'ocean') {
+    loopNoise(v, true, 'lowpass', 700, .45, .085); loopNoise(v, false, 'highpass', 2500, .05, .085);
+  } else if (mode === 'crickets') {
+    loopNoise(v, true, 'lowpass', 300, .18);
+    every(v, 380, () => { if (Math.random() < .55) { const f = 4200 + Math.random() * 600; for (let k = 0; k < 3; k++) setTimeout(() => { if (!v.dead) tone(f, .035, .025, g); }, k * 45); } });
+  } else if (mode === 'cafe') {
+    loopNoise(v, true, 'bandpass', 420, .35); loopNoise(v, false, 'lowpass', 900, .05);
+    every(v, 400, () => { if (Math.random() < .08) { tone(2600 + Math.random() * 1500, .25, .03, g); tone(3900 + Math.random() * 800, .2, .015, g); } });
   }
-  state.lib && (state.lib.settings.ambient = next);
-  const btn = $('#bSound'); btn.setAttribute('aria-pressed', next !== 'off' ? 'true' : 'false'); btn.setAttribute('aria-label', 'Sounds: ' + AMBIENTS[next]);
-  if (R3) R3.radioLed.color.set(next === 'off' ? 0x3a2a20 : 0xffb347);
+  g.gain.setTargetAtTime(1, c.currentTime, .35); // fade in
+  return v;
+}
+// Fade a voice out, stop its timers now and its sources once the fade has finished.
+function retire(v, tau) {
+  if (v.dead) return; v.dead = true;
+  v.timers.forEach(clearInterval); v.timers = [];
+  const t = SND.ctx.currentTime; v.g.gain.cancelScheduledValues(t); v.g.gain.setTargetAtTime(0, t, tau);
+  setTimeout(() => v.nodes.forEach(n => { try { if (n.stop) n.stop(); n.disconnect(); } catch (e) { /* already stopped */ } }), tau * 6500);
+}
+// (Re)build the voice for SND.mode, fading out whatever played before. Nothing sounds while the tab is hidden.
+function startAmbient() {
+  // the new sound ramps in slowly, so the old one lingers while it is replaced (a real crossfade) and fades fast only into silence
+  if (SND.voice) { retire(SND.voice, SND.mode === 'off' || SND.hidden ? .15 : .4); SND.voice = null; }
+  if (SND.mode === 'off' || SND.hidden || !SND.ctx) return;
+  SND.voice = buildAmbient(SND.mode);
+}
+function syncSoundUI() {
+  const on = SND.mode !== 'off';
+  const btn = $('#bSound'); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.setAttribute('aria-label', 'Sounds: ' + AMBIENTS[SND.mode]);
+  if (R3 && R3.radioLed) R3.radioLed.color.set(on ? 0xffb347 : 0x3a2a20);
   if (!$('#soundPop').hidden) renderSoundPop();
 }
+function setAmbient(next) {
+  if (!AMBIENTS[next]) next = 'off';
+  if (next !== 'off' && !audio()) { toast('Sound is not available in this browser.'); return; }
+  const changed = next !== SND.mode;
+  SND.mode = next;
+  if (changed || (next !== 'off' && !SND.voice)) startAmbient();
+  if (next !== 'off') wake();
+  if (state.lib && state.lib.settings.ambient !== next) { state.lib.settings.ambient = next; saveLib(); }
+  syncSoundUI();
+}
+// A saved ambience cannot start on page load (browsers need a click or key first), so it waits for the first one.
+let resumeArmed = false;
+function armResume() {
+  if (resumeArmed || SND.mode === 'off') return;
+  resumeArmed = true;
+  const evs = ['pointerdown', 'pointerup', 'keydown', 'touchend']; // inputs browsers accept as permission to play
+  const disarm = () => { resumeArmed = false; evs.forEach(e => document.removeEventListener(e, go, true)); };
+  const go = () => {
+    if (SND.mode === 'off') { disarm(); return; }
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return; // Esc and the like are not a click: wait for a real one
+    const c = audio(); if (!c) { disarm(); return; }
+    const ready = () => { if (c.state === 'running') { disarm(); if (!SND.voice) startAmbient(); } };
+    if (c.state === 'running') ready(); else { try { c.resume().then(ready, () => {}); } catch (e) { /* stays armed */ } }
+  };
+  evs.forEach(e => document.addEventListener(e, go, true));
+}
+// Leave no timers or audio work running behind a hidden tab; pick the ambience back up on return.
+function ambientVisibility(hidden) {
+  SND.hidden = hidden;
+  if (hidden) {
+    if (SND.voice) { retire(SND.voice, .08); SND.voice = null; }
+    setTimeout(() => { if (SND.hidden && SND.ctx && SND.ctx.state === 'running') SND.ctx.suspend().catch(() => {}); }, 400);
+  } else if (SND.ctx) { wake(); if (!SND.voice) startAmbient(); }
+}
+// The ambience that fits the current weather, unless it is already selected. Only ever suggested.
+function weatherAmbience() { const a = WEATHER_MODES[weatherMode()].ambient; return a && a !== SND.mode ? a : null; }
 function cycleSound() { const order = Object.keys(AMBIENTS); const n = order[(order.indexOf(SND.mode) + 1) % order.length]; setAmbient(n); toast(AMBIENTS[n]); }
 let lastPenSnd = 0;
 function sfx(kind, pen) {
@@ -1150,10 +1254,10 @@ function renderSoundPop() {
   pop.append(h('div', { class: 'pop-head' }, h('h3', { text: 'Sounds' }), h('button', { type: 'button', class: 'x', 'aria-label': 'Close', onclick: closeSoundPop }, '×')));
   pop.append(h('fieldset', null, h('legend', { text: 'Room ambience' }), h('div', { class: 'chips' }, Object.keys(AMBIENTS).map(k => h('button', { type: 'button', class: 'chip', 'aria-pressed': SND.mode === k ? 'true' : 'false', onclick: () => setAmbient(k) }, AMBIENTS[k])))));
   pop.append(settingToggle('Pen sounds', 'A soft scratch as you write; clacks for the typewriter', 'penSound'));
-  const vol = h('input', { type: 'range', min: '0', max: '1', step: '.05', value: String(S().volume), 'aria-label': 'Pen sound volume' });
-  vol.addEventListener('input', () => { state.lib.settings.volume = +vol.value; if (SND.penGain) SND.penGain.gain.value = +vol.value; });
+  const vol = h('input', { type: 'range', min: '0', max: '1', step: '.05', value: String(S().volume), 'aria-label': 'Sound volume' });
+  vol.addEventListener('input', () => { state.lib.settings.volume = +vol.value; if (SND.penGain) SND.penGain.gain.value = +vol.value; applyAmbientVolume(); });
   vol.addEventListener('change', () => { saveLib(); sfx('pen', 'pencil'); });
-  pop.append(h('label', { class: 'rng' }, h('span', { text: 'Pen volume' }), vol, h('output', { text: '' })));
+  pop.append(h('label', { class: 'rng' }, h('span', { text: 'Volume' }), vol, h('output', { text: '' })));
 }
 function openSoundPop() { const p = $('#soundPop'); if (!p.hidden) { closeSoundPop(); return; } p.hidden = false; renderSoundPop(); }
 function closeSoundPop() { $('#soundPop').hidden = true; }

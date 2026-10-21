@@ -158,14 +158,14 @@ function tabSettings(body) {
       h('h3', { text: 'The room' }),
       h('button', { type: 'button', class: 'btn', onclick: () => { closeDrawer(); openRoomCustom('walls'); } }, 'Customize 3D room')
     ),
-    chipRow(h('div', { class: 'chips' }), { auto: 'Follow my clock', day: 'Always day', night: 'Always night' }, st.sky, v => { st.sky = v; saveLib(); applySettings(); renderDrawer(); }));
+    chipRow(h('div', { class: 'chips' }), { auto: 'Follow my clock', day: 'Always day', night: 'Always night' }, st.sky, v => { setSkyMode(v); renderDrawer(); }));
   const sw = (map, cur, on) => h('div', { class: 'swatches' }, Object.keys(map).map(k => h('button', { type: 'button', class: 'sw', title: map[k][0], 'aria-label': map[k][0], 'aria-pressed': k === cur ? 'true' : 'false', style: 'background:' + map[k][1], onclick: () => on(k) })));
   const roomSet = (k, v) => { st[k] = v; saveLib(); applyRoomStyle(); renderDrawer(); };
   sky.append(
     h('p', { class: 'eyebrow', text: 'Wall colour' }), sw(WALLS, st.wall, v => roomSet('wall', v)),
     h('p', { class: 'eyebrow', text: 'Desk, shelf and floor' }), chipRow(h('div', { class: 'chips' }), Object.fromEntries(Object.keys(WOODS).map(k => [k, WOODS[k][0]])), st.wood, v => roomSet('wood', v)),
     h('p', { class: 'eyebrow', text: 'Lamp light' }), chipRow(h('div', { class: 'chips' }), Object.fromEntries(Object.keys(LAMPS).map(k => [k, LAMPS[k][0]])), st.lampTone, v => roomSet('lampTone', v)),
-    h('p', { class: 'eyebrow', text: 'Curtain fabric' }), chipRow(h('div', { class: 'chips' }), Object.fromEntries(Object.keys(CURTAIN_COLORS).map(k => [k, CURTAIN_COLORS[k].name])), st.curtainColor || 'ochre', v => roomSet('curtainColor', v))
+    h('p', { class: 'eyebrow', text: 'Curtain fabric' }), chipRow(h('div', { class: 'chips' }), Object.fromEntries(Object.keys(CURTAIN_COLORS).map(k => [k, CURTAIN_COLORS[k][0]])), st.curtainColor || 'ochre', v => roomSet('curtainColor', v))
   );
   body.append(sky);
   body.append(h('div', { class: 'card' }, h('h3', { text: 'Page turning' }), h('p', { class: 'note', text: 'Swipe a page with your finger, drag a page corner with the mouse, or use the arrow keys.' }),

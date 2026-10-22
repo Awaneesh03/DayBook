@@ -18,6 +18,7 @@ Opened anywhere else it falls back to the browser's localStorage, so journals st
 - `node tests/test_weather_audio.mjs`: weather, ambience and persistence.
 - `node tests/test_stability.mjs`: room materials, hidden panels, PIN lock, custom presets, starter presets, text encoding.
 - `node tests/test_tour.mjs`: the guided tour bar, its controls and what its stops show.
+- `node tests/test_backup.mjs`: full backup and restore (round trip, bad and hostile files, storage full, cancelling, other tabs, the Claude store).
 
 They drive Google Chrome (set `CHROME=` for another path) and need internet. `ONLY="text"` runs just the tests whose name contains the text,
 and passing a path tests another build instead of `index.html`.
@@ -31,8 +32,10 @@ and passing a path tests another build instead of `index.html`.
 - Tour stops assume the default desk layout; objects moved in arrange mode can fall outside a stop's frame.
 - On portrait phones the room view shows only the middle of the room, and at 460 px or narrower some header buttons move into
   the Library (Settings has "Customize 3D room", which also leads to Look outside). The peek bar's label wraps on phones.
-- Journals live in the browser (about 5 MB, photos use most of it). Clearing browsing data erases them, so the Library suggests
-  saving a copy now and then.
+- Journals live in the browser (about 5 MB, photos use most of it). Clearing browsing data erases them, so keep a full backup
+  (Library, Settings, "Export full backup"); "Restore from a backup" replaces everything on this device, after a preview and a
+  safety copy. Restore is a full replacement, not a merge. Daybook can hand the safety copy to the browser but cannot check
+  that it was kept, and the restore through the Claude store has only been tested against a stand-in for its database.
 - Entries made before the charset fix, on a page served without a charset, may hold garbled template boxes or stickers
   (`â˜`, `ðŸŒ™`). Typed text was never affected, and nothing repairs these automatically.
 - Tested in Google Chrome and WebKit (Safari's engine), at desktop and phone sizes; not yet on real phones or in Firefox.

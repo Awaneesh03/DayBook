@@ -354,6 +354,7 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
 .room-pop-actions { display: flex; flex-direction: column; gap: 8px; }
 .room-pop-actions .btn { justify-content: flex-start; text-align: left; }
 .room-pop-actions .btn svg { width: 18px; height: 18px; flex: none; }
+.bk-msg { color: var(--danger); font-weight: 600; }   /* why a backup file was refused, or why a restore stopped */
 .room-pop.docked { left: 12px; right: 12px; top: auto; bottom: max(12px, env(safe-area-inset-bottom, 0px)); width: auto; }
 
 /* ---------- Room Customizer Modal & Presets ---------- */
@@ -1644,23 +1645,52 @@ function localStore() {
   const read = () => { let m = null; try { m = JSON.parse(window.localStorage.getItem(KEY) || 'null'); } catch (e) { /* private mode or unreadable */ } m = m && typeof m === 'object' ? m : { lib: null, pages: {} }; if (!m.pages) m.pages = {}; return m; };
   // a write that did not happen has to reach the save queue ("Not saved yet"), never look saved
   const fail = (e, what) => { const err = new Error(/quota/i.test((e && e.name) + ' ' + (e && e.message)) ? 'Your browser has no room left to save ' + what + '. Save a copy of your journals (Library, Settings), then remove some photos to make space.' : 'Your browser is not letting Daybook save ' + what + '. Check that this site is allowed to store data.'); err.friendly = true; return err; };
+  // which restored backup this tab loaded: after a restore in another tab, what this tab holds is older and must not be saved
+  let seen = null;
+  const restoredSince = m => !!m.lib && (m.restored || null) !== seen;
+  const mayWrite = (m = read()) => { if (state.restoring || restoredSince(m)) throw restoredElsewhere(); return m; };   // restoring here, or restored elsewhere
   // change only this part of what is stored, so journals and pages saved by another tab are kept
-  const persist = change => { const m = read(); change(m); try { window.localStorage.setItem(KEY, JSON.stringify(m)); } catch (e) { throw fail(e, 'your changes'); } };
+  const persist = change => { const m = mayWrite(); change(m); try { window.localStorage.setItem(KEY, JSON.stringify(m)); } catch (e) { throw fail(e, 'your changes'); } };
   const media = {};
   return {
     kind: 'local',
     async init() {
-      const mem = read(); let legacy = [];
+      const mem = read(); seen = mem.restored || null; let legacy = [];
       if (!mem.lib) { try { const old = JSON.parse(window.localStorage.getItem('daybook:v1') || '{}') || {}; legacy = Object.keys(old).map(k => old[k]); } catch (e) { legacy = []; } }
       return { lib: mem.lib, pages: Object.assign({}, mem.pages), legacy };
     },
     // another tab saved: hand its journals and pages to the same merge the cloud store uses (unsaved edits here win)
-    subscribe(onLib, onPages) { window.addEventListener('storage', e => { if (e.key !== KEY || !e.newValue) return; const m = read(); if (m.lib) onLib(m.lib); onPages(m.pages); }); },
+    subscribe(onLib, onPages) { window.addEventListener('storage', e => { if (e.key !== KEY || !e.newValue) return; let n = null; try { n = JSON.parse(e.newValue); } catch (x) { /* not ours to read */ }
+      // judged by the event's own value: while this tab's own write is still pending, reading storage here still returns that write
+      if (n && restoredSince(n)) { restoredElsewhere(); return; } const m = read(); if (m.lib) onLib(m.lib); onPages(m.pages); }); },
     async writeLib(lib) { persist(m => { m.lib = clone(lib); }); },
     async writePage(k, d) { persist(m => { if (d) m.pages[k] = clone(d); else delete m.pages[k]; }); },
-    async writeMedia(id, d) { try { window.localStorage.setItem(MK + id, JSON.stringify(d)); } catch (e) { throw fail(e, 'this photo'); } media[id] = d; },
+    async writeMedia(id, d) { mayWrite(); try { window.localStorage.setItem(MK + id, JSON.stringify(d)); } catch (e) { throw fail(e, 'this photo'); } media[id] = d; },
     async readMedia(id) { if (media[id]) return media[id]; try { return JSON.parse(window.localStorage.getItem(MK + id) || 'null'); } catch (e) { return null; } },
-    async deleteMedia(id) { delete media[id]; try { window.localStorage.removeItem(MK + id); } catch (e) { /* ignore */ } }
+    async deleteMedia(id) { mayWrite(); delete media[id]; try { window.localStorage.removeItem(MK + id); } catch (e) { /* ignore */ } },
+    // a restored backup replaces everything stored; if any write fails, exactly what was stored before is put back
+    async replaceAll(lib, pages, newMedia) {
+      const ls = window.localStorage, ours = k => k === KEY || k.indexOf(MK) === 0;
+      const before = {}; Object.keys(ls).filter(ours).forEach(k => { before[k] = ls.getItem(k); });
+      const mark = newId('r'), blob = JSON.stringify({ lib, pages, restored: mark });   // other tabs see the mark and stop saving what they hold
+      try {
+        Object.keys(before).forEach(k => { if (k !== KEY && !newMedia[k.slice(MK.length)]) ls.removeItem(k); });   // old photos go first, to make room
+        Object.keys(newMedia).forEach(id => ls.setItem(MK + id, JSON.stringify(newMedia[id])));
+        ls.setItem(KEY, blob);
+      } catch (e) {
+        let back = true;
+        Object.keys(ls).filter(ours).forEach(k => { if (!(k in before)) ls.removeItem(k); });
+        Object.keys(before).forEach(k => { try { ls.setItem(k, before[k]); } catch (err) { back = false; } });
+        const err = fail(e, 'this backup'); err.partial = !back; throw err;
+      }
+      Object.keys(media).forEach(id => { delete media[id]; });
+      // a tab that saved at the very moment of the restore lands just after it (and misses the mark): once that has settled, write it again
+      // ponytail: one check; a tab saving again within that same instant could still win. localStorage has no compare-and-swap across tabs
+      await new Promise(r => setTimeout(r, 400));
+      if (read().restored !== mark) { try { ls.setItem(KEY, blob); } catch (e) { const err = fail(e, 'this backup'); err.partial = true; throw err; } }
+      return mark;   // the reloaded page checks it is still there before saying the restore worked
+    },
+    get restored() { return seen; }
   };
 }
 async function cloudStore() {
@@ -1690,7 +1720,27 @@ async function cloudStore() {
     writePage(k, d) { return d ? pagesCol.doc(k).set(d) : pagesCol.doc(k).delete(); },
     writeMedia(id, d) { return mediaCol.doc(id).set(d); },
     async readMedia(id) { const s = await mediaCol.doc(id).get(); return s.exists ? s.data() : null; },
-    deleteMedia(id) { return mediaCol.doc(id).delete(); }
+    deleteMedia(id) { return mediaCol.doc(id).delete(); },
+    // a restored backup replaces everything stored; if a write fails part way, what was there before is written back
+    async replaceAll(lib, pages, newMedia) {
+      const before = { lib: null, pages: {}, media: {} };
+      const l = await libRef.get(); if (l.exists) before.lib = l.data();
+      (await pagesCol.get()).docs.forEach(d => { before.pages[d.id] = d.data(); });
+      (await mediaCol.get()).docs.forEach(d => { before.media[d.id] = d.data(); });
+      const write = async (L, P, M, prev) => {
+        for (const id of Object.keys(M)) await mediaCol.doc(id).set(M[id]);
+        for (const k of Object.keys(P)) await pagesCol.doc(k).set(P[k]);
+        if (L) await libRef.set(L);
+        for (const k of Object.keys(prev.pages)) if (!P[k]) await pagesCol.doc(k).delete();
+        for (const id of Object.keys(prev.media)) if (!M[id]) await mediaCol.doc(id).delete();
+      };
+      try { await write(lib, pages, newMedia, before); }
+      catch (e) {
+        let back = true;
+        try { await write(before.lib, before.pages, before.media, { pages, media: newMedia }); } catch (err) { back = false; }   // the safety copy still holds it
+        throw Object.assign(e instanceof Error ? e : new Error(String(e)), { partial: !back });
+      }
+    }
   };
 }
 function importLegacy(lib, pages, legacy) {
@@ -1715,8 +1765,14 @@ function queue(fn) {
   });
   return chain;
 }
+// A backup was restored in another tab: this tab holds what was there before, so it saves nothing more and reloads into it.
+function restoredElsewhere() {
+  if (!state.restoring) { state.restoring = true; saveErrShown = true; toast('Daybook was restored from a backup in another tab. Opening it here too…'); setTimeout(() => location.reload(), 1500); }
+  return new Error('Daybook was restored from a backup in another tab.');
+}
 function saveLib(now) {
   clearTimeout(libTimer);
+  if (state.restoring) return;   // a restored backup is being written; the old state must not be saved over it
   const run = () => { libTimer = null; libInflight++; const snap = clone(state.lib); return queue(() => state.store.writeLib(snap)).then(() => { libInflight--; }); };
   if (now) return run();
   libTimer = setTimeout(run, 350);
@@ -1724,6 +1780,7 @@ function saveLib(now) {
 const pageTimers = new Map();
 function pageIsEmpty(p) { return !p || (!(p.text || '').trim() && !p.mood && !p.style && !(p.items && p.items.length) && !(p.ink && p.ink.length)); }
 function savePage(key, now) {
+  if (state.restoring) return;
   dirtyPages.add(key); editSeq.set(key, (editSeq.get(key) || 0) + 1);
   setSaveState('Saving…');
   clearTimeout(pageTimers.get(key));
@@ -1732,6 +1789,7 @@ function savePage(key, now) {
 }
 function flushPage(key) {
   clearTimeout(pageTimers.get(key)); pageTimers.delete(key);
+  if (state.restoring) return chain;
   const seq = editSeq.get(key);
   const p = state.pages.get(key);
   const empty = pageIsEmpty(p);
@@ -4818,14 +4876,18 @@ function journalMarkdown(j) {
   pages.forEach(p => { out += '---\n\n## Page ' + p.n + (p.date ? ' · ' + longDate(p.date) : '') + '\n' + (p.mood ? 'Mood: ' + MOODS[p.mood - 1] + '\n' : '') + '\n' + p.text + '\n\n'; });
   return { out, count: pages.length };
 }
-async function saveFile(name, data) {
+// says whether the file really went out, so a restore can refuse to go on without its safety copy
+async function saveFile(name, data, type) {
   if (!downloadsApi) {   // outside Claude: an ordinary browser download
-    const a = h('a', { href: URL.createObjectURL(new Blob([data], { type: 'text/markdown;charset=utf-8' })), download: name, hidden: true });
-    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-    toast('Saved a copy to your downloads.'); return;
+    // the click hands the file to the browser; whether it then lands in downloads (or is kept) cannot be seen from here
+    try {
+      const a = h('a', { href: URL.createObjectURL(new Blob([data], { type: type || 'text/markdown;charset=utf-8' })), download: name, hidden: true });
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    } catch (e) { toast('Could not save a copy from here.'); return false; }
+    toast('Saved a copy to your downloads.'); return true;
   }
-  try { await downloadsApi.save({ filename: name, data }); toast('Copy saved.'); }
-  catch (e) { if (!e || e.code !== 'declined') toast('Could not save a copy from here.'); }
+  try { await downloadsApi.save({ filename: name, data }); toast('Copy saved.'); return true; }
+  catch (e) { if (!e || e.code !== 'declined') toast('Could not save a copy from here.'); return false; }
 }
 async function exportJournal(j) {
   await flushAll(); const { out, count } = journalMarkdown(j);
@@ -4837,6 +4899,113 @@ async function exportAll() {
   state.lib.journals.forEach(j => { const { out, count } = journalMarkdown(j); if (count) { all += out.replace(/^# /, '# ') + '\n'; total += count; } });
   if (!total) { toast('Nothing written yet.'); return; }
   saveFile('daybook-' + todayId() + '.md', all);
+}
+/* ---- full backup and restore ---- */
+// One JSON file: { format, version, app, createdAt, lib, pages, media }. lib and pages keep the stored shapes; media holds
+// the photos that covers and pages use. The PIN (hash and hint) stays on this device.
+const BACKUP = { format: 'daybook-backup', version: 1, maxBytes: 25 * 1024 * 1024 };
+const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+const ID_OK = /^[\w-]{1,64}$/, PHOTO_OK = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+const COLOR_OK = /^#[0-9a-f]{3,8}$/i;   // colours reach CSS backgrounds, so only the hex colours Daybook writes (never url(...))
+const colorOk = c => c === undefined || COLOR_OK.test(c);
+function backupError(msg) { const e = new Error(msg); e.friendly = true; return e; }
+// the photos a library's covers and its pages point at
+function photoIds(lib, pages) {
+  const s = new Set();
+  lib.journals.forEach(j => artMids(j).forEach(m => s.add(m)));
+  Object.values(pages).forEach(p => (p.items || []).forEach(it => { if (it && it.mid) s.add(it.mid); }));
+  return s;
+}
+function libSummary(journals, pages, photos) {
+  const written = Object.values(pages).filter(p => (p.text || '').trim() || (p.items || []).length || (p.ink || []).length);
+  return plural(journals, 'journal') + ', ' + plural(written.length, 'written page') + ', ' + plural(written.reduce((a, p) => a + countWords(p.text), 0), 'word') + ' and ' + plural(photos, 'photo');
+}
+async function backupData() {
+  await flushAll();
+  const lib = clone(state.lib); delete lib.settings.pinHash; delete lib.settings.pinHint;
+  const pages = {}; for (const [k, p] of state.pages) pages[k] = clone(p);
+  const media = {};
+  for (const mid of photoIds(lib, pages)) { const d = await state.store.readMedia(mid); if (d && typeof d.data === 'string') media[mid] = d; }
+  return { format: BACKUP.format, version: BACKUP.version, app: 'Daybook', createdAt: new Date().toISOString(), lib, pages, media };
+}
+async function exportBackup() {
+  let text;
+  try { text = JSON.stringify(await backupData()); } catch (e) { toast('Could not prepare the backup, so nothing was saved. Please try again.'); return false; }
+  return saveFile('daybook-backup-' + todayId() + '.json', text, 'application/json');
+}
+// Checks a backup file completely before anything is changed; throws a plain-language error for anything it cannot trust.
+function checkBackup(text) {
+  let d; try { d = JSON.parse(text); } catch (e) { throw backupError('This file is not a Daybook backup: it is not readable JSON.'); }
+  if (!isObj(d) || d.format !== BACKUP.format) throw backupError('This file is not a Daybook backup.');
+  if (!Number.isInteger(d.version) || d.version < 1) throw backupError('This backup has no version Daybook understands.');
+  if (d.version > BACKUP.version) throw backupError('This backup was made by a newer version of Daybook, so it cannot be restored here.');
+  const L = d.lib;
+  if (!isObj(L) || !Array.isArray(L.journals) || !L.journals.length) throw backupError('This backup has no journals in it.');
+  if (L.journals.length > 500) throw backupError('This backup lists more journals than Daybook can hold.');
+  if (L.settings !== undefined && !isObj(L.settings)) throw backupError('The settings in this backup are damaged.');
+  const ids = new Set();
+  L.journals.forEach((j, i) => {
+    const bad = () => backupError('Journal ' + (i + 1) + ' in this backup is damaged.');
+    if (!isObj(j) || typeof j.id !== 'string' || !ID_OK.test(j.id) || typeof j.title !== 'string') throw bad();
+    if (ids.has(j.id)) throw backupError('This backup lists the journal “' + j.title.slice(0, 40) + '” twice, so it cannot be restored safely.');
+    ids.add(j.id);
+    if ((j.cover !== undefined && !isObj(j.cover)) || (j.defaults !== undefined && !isObj(j.defaults)) || (j.bookmarks !== undefined && !Array.isArray(j.bookmarks))) throw bad();
+    if (!colorOk(j.ribbon) || (j.cover && !colorOk(j.cover.color)) || (j.bookmarks || []).some(b => !isObj(b) || !Number.isInteger(b.n) || !colorOk(b.color))) throw bad();
+    if (j.art !== undefined && (!isObj(j.art) || (j.art.layers !== undefined && !(Array.isArray(j.art.layers) && j.art.layers.every(isObj))))) throw bad();
+  });
+  if (!isObj(d.pages)) throw backupError('The pages in this backup are missing.');
+  const pages = {}; let skipped = 0;
+  for (const [k, p] of Object.entries(d.pages)) {
+    const m = /^([\w-]{1,64})~(\d{1,3})$/.exec(k), bad = () => backupError('A page in this backup is damaged, so it cannot be restored safely.');
+    if (!m || !isObj(p) || p.j !== m[1] || p.n !== +m[2] || p.n < 1 || p.n > MAX_PAGES) throw bad();
+    if ((p.text !== undefined && typeof p.text !== 'string') || (p.date !== undefined && !(typeof p.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.date)))) throw bad();
+    if ((p.mood !== undefined && !(Number.isInteger(p.mood) && p.mood >= 0 && p.mood <= 5)) || (p.style !== undefined && !isObj(p.style))) throw bad();
+    if ((p.items !== undefined && !(Array.isArray(p.items) && p.items.every(it => isObj(it) && colorOk(it.c)))) || (p.ink !== undefined && !(Array.isArray(p.ink) && p.ink.every(isObj)))) throw bad();
+    if (JSON.stringify(p).length > 245000) throw backupError('Page ' + p.n + ' in this backup holds more than Daybook can save on one page.');
+    if (!ids.has(p.j)) { skipped++; continue; }   // a page of a journal the backup does not have
+    pages[k] = p;
+  }
+  if (d.media !== undefined && !isObj(d.media)) throw backupError('The photos in this backup are damaged.');
+  const want = photoIds(L, pages), media = {};
+  for (const [mid, v] of Object.entries(d.media || {})) {
+    if (!ID_OK.test(mid) || !isObj(v) || typeof v.data !== 'string' || !PHOTO_OK.test(v.data)) throw backupError('A photo in this backup is damaged, so it cannot be restored safely.');
+    if (want.has(mid)) media[mid] = { data: v.data, w: +v.w || 0, h: +v.h || 0, created: +v.created || Date.now() };
+  }
+  const lib = normLib(L);
+  lib.journals.forEach(j => { j.pages = Math.min(j.pages, MAX_PAGES); Object.values(pages).forEach(p => { if (p.j === j.id && p.n > j.pages) j.pages = p.n; }); });
+  if (lib.activeId && !ids.has(lib.activeId)) lib.activeId = null;
+  const created = new Date(d.createdAt);
+  return { lib, pages, media, info: { created: isNaN(created) ? null : created, summary: libSummary(lib.journals.length, pages, Object.keys(media).length), missing: [...want].filter(m => !media[m]).length, skipped } };
+}
+// Full replacement, once the visitor has confirmed it: a safety copy of what is here goes to their downloads first,
+// then everything is written in one go (put back as it was if any write fails) and the page reloads into the backup.
+async function restoreBackup(b) {
+  await flushAll();
+  let safety; try { safety = JSON.stringify(await backupData()); } catch (e) { throw backupError('Could not make a safety copy of your current journals, so nothing was restored.'); }
+  // the time keeps each safety copy's name its own, so the recovery message never points at an older copy from the same day
+  const safetyName = 'daybook-before-restore-' + todayId() + '-' + new Date().toTimeString().slice(0, 8).replace(/:/g, '') + '.json';
+  if (!(await saveFile(safetyName, safety, 'application/json'))) throw backupError('The safety copy of your current journals was not saved, so nothing was restored.');
+  const lib = clone(b.lib); lib.settings.pinHash = S().pinHash; lib.settings.pinHint = S().pinHint; lib.settings.welcomed = true;
+  state.restoring = true; clearTimeout(libTimer); pageTimers.forEach(t => clearTimeout(t)); pageTimers.clear();
+  let mark;
+  try { await chain; mark = await state.store.replaceAll(lib, b.pages, b.media); }
+  catch (e) {
+    // could not put back what was there: saving stays off, so nothing on screen (from before) is saved over the mix
+    if (e && e.partial) throw backupError('The restore stopped part way and Daybook could not put everything back. Reload Daybook, then restore “' + safetyName + '” from your downloads to get back what was here.');
+    state.restoring = false; throw backupError((e && e.friendly ? e.message : 'Could not write the backup.') + ' Nothing was changed.');
+  }
+  // in this browser, success is only claimed by the reloaded page, once it finds this restore still stored (checkRestored)
+  try { if (mark) sessionStorage.setItem(RESTORE_CHECK, mark); } catch (e) { mark = null; }
+  toast(mark ? 'Opening the restored backup…' : 'Backup restored. Opening it now…'); setTimeout(() => location.reload(), 700);
+}
+const RESTORE_CHECK = 'daybook3d:restore-check';
+// After the reload: another tab saving in the same instant as the restore can still have landed last. Say which happened.
+function checkRestored() {
+  let want = null; try { want = sessionStorage.getItem(RESTORE_CHECK); sessionStorage.removeItem(RESTORE_CHECK); } catch (e) { return; }
+  if (!want) return;
+  if (state.store.restored === want) { toast('Backup restored.'); return; }
+  LB.restoreErr = 'Another Daybook tab saved over the backup as it was being restored, so what you see is not the backup. Close other Daybook tabs, then restore it again.';
+  toast(LB.restoreErr); openDrawer('settings'); scrollBackup();
 }
 async function deleteJournal(id) {
   const keys = Array.from(state.pages.keys()).filter(k => k.indexOf(id + '~') === 0);
@@ -5288,6 +5457,43 @@ function tabSettings(body) {
   body.append(lock);
   body.append(h('div', { class: 'card' }, h('h3', { text: 'Your words' }), h('p', { class: 'note', text: 'Save every journal as one text file you can keep anywhere.' }),
     h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: exportAll }, 'Save a copy of everything'), h('button', { type: 'button', class: 'btn', onclick: () => { closeDrawer(); showWelcome(true); } }, 'Show the welcome tips'))));
+  body.append(backupCard());
+}
+// Full backup: everything in one file, and restoring one. Choosing a file only checks it and shows what it holds;
+// nothing changes until the visitor confirms the replacement.
+function backupCard() {
+  const card = h('div', { class: 'card', id: 'bkCard' }, h('h3', { text: 'Full backup' }),
+    h('p', { class: 'note', text: 'One file with every journal, page, photo, sticker, drawing, room preset and setting. Your PIN stays on this device. Keep it somewhere safe to bring Daybook back later or on another browser.' }));
+  const pick = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'aria-label': 'Choose a Daybook backup file', onchange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; pickBackup(f); } });
+  card.append(pick, h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: exportBackup }, 'Export full backup'), h('button', { type: 'button', class: 'btn', onclick: () => pick.click() }, 'Restore from a backup…')));
+  if (LB.restoreErr) card.append(h('p', { class: 'note bk-msg', role: 'alert', text: LB.restoreErr }));
+  const r = LB.restore;
+  if (r) {
+    const now = {}; for (const [k, v] of state.pages) now[k] = v;
+    const when = r.info.created ? ' made ' + r.info.created.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const box = h('div', { class: 'confirm', role: 'group', 'aria-label': 'Restore preview' },
+      h('p', null, h('b', { text: 'Restore “' + r.name + '”?' })),
+      h('p', { text: 'This backup' + when + ' holds ' + r.info.summary + '.' }),
+      h('p', { text: 'Restoring replaces everything Daybook holds on this device now (' + libSummary(state.lib.journals.length, now, photoIds(state.lib, now).size) + '). A copy of what is here now goes to your downloads first.' }));
+    if (r.info.missing) box.append(h('p', { class: 'note', text: plural(r.info.missing, 'photo') + ' the journals use ' + (r.info.missing > 1 ? 'are' : 'is') + ' not in this backup and will show as empty frames.' }));
+    if (r.info.skipped) box.append(h('p', { class: 'note', text: plural(r.info.skipped, 'page') + ' in this backup belong' + (r.info.skipped > 1 ? '' : 's') + ' to no journal in it and will be left out.' }));
+    box.append(h('div', { class: 'row' },
+      h('button', { type: 'button', class: 'btn danger solid', onclick: async e => { e.currentTarget.disabled = true; try { await restoreBackup(r); } catch (err) { LB.restore = null; LB.restoreErr = err && err.friendly ? err.message : 'Could not restore this backup. Nothing was changed.'; renderDrawer(); scrollBackup(); } } }, 'Replace everything with this backup'),
+      h('button', { type: 'button', class: 'btn', onclick: () => { LB.restore = null; LB.restoreErr = null; renderDrawer(); scrollBackup(); } }, 'Cancel')));
+    card.append(box);
+  }
+  return card;
+}
+function scrollBackup() { const c = $('#bkCard'); if (c) c.scrollIntoView({ block: 'nearest' }); }
+async function pickBackup(file) {
+  if (!file) return;   // the picker was cancelled
+  LB.restore = null; LB.restoreErr = null;
+  try {
+    if (file.size > BACKUP.maxBytes) throw backupError('This file is too large to be a Daybook backup (over 25 MB).');
+    let text; try { text = await file.text(); } catch (e) { throw backupError('Could not read that file.'); }
+    LB.restore = Object.assign(checkBackup(text), { name: file.name });
+  } catch (e) { LB.restoreErr = e && e.friendly ? e.message : 'This file could not be read as a Daybook backup.'; }
+  LB.tab = 'settings'; renderDrawer(); scrollBackup();
 }
 
 /* =====================================================================
@@ -5850,6 +6056,7 @@ async function boot() {
   updateHudSub();
   $('#loader').classList.add('gone');
   if (S().pinHash) showLock();
+  checkRestored();
   if (has3d) setHint(R3.mobile ? 'Tap a journal to take it down, then tap it on the desk to open. Drag to look around.' : 'Click a journal to take it down, then click it on the desk to open. Drag to look around.');
   else { openDrawer(); fadeHint(); }
   if (!S().welcomed && !S().pinHash) setTimeout(() => showWelcome(), has3d ? 1400 : 300);

@@ -161,6 +161,7 @@ async function boot() {
   updateHudSub();
   $('#loader').classList.add('gone');
   if (S().pinHash) showLock();
+  checkRestored();
   if (has3d) setHint(R3.mobile ? 'Tap a journal to take it down, then tap it on the desk to open. Drag to look around.' : 'Click a journal to take it down, then click it on the desk to open. Drag to look around.');
   else { openDrawer(); fadeHint(); }
   if (!S().welcomed && !S().pinHash) setTimeout(() => showWelcome(), has3d ? 1400 : 300);

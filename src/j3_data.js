@@ -68,23 +68,52 @@ function localStore() {
   const read = () => { let m = null; try { m = JSON.parse(window.localStorage.getItem(KEY) || 'null'); } catch (e) { /* private mode or unreadable */ } m = m && typeof m === 'object' ? m : { lib: null, pages: {} }; if (!m.pages) m.pages = {}; return m; };
   // a write that did not happen has to reach the save queue ("Not saved yet"), never look saved
   const fail = (e, what) => { const err = new Error(/quota/i.test((e && e.name) + ' ' + (e && e.message)) ? 'Your browser has no room left to save ' + what + '. Save a copy of your journals (Library, Settings), then remove some photos to make space.' : 'Your browser is not letting Daybook save ' + what + '. Check that this site is allowed to store data.'); err.friendly = true; return err; };
+  // which restored backup this tab loaded: after a restore in another tab, what this tab holds is older and must not be saved
+  let seen = null;
+  const restoredSince = m => !!m.lib && (m.restored || null) !== seen;
+  const mayWrite = (m = read()) => { if (state.restoring || restoredSince(m)) throw restoredElsewhere(); return m; };   // restoring here, or restored elsewhere
   // change only this part of what is stored, so journals and pages saved by another tab are kept
-  const persist = change => { const m = read(); change(m); try { window.localStorage.setItem(KEY, JSON.stringify(m)); } catch (e) { throw fail(e, 'your changes'); } };
+  const persist = change => { const m = mayWrite(); change(m); try { window.localStorage.setItem(KEY, JSON.stringify(m)); } catch (e) { throw fail(e, 'your changes'); } };
   const media = {};
   return {
     kind: 'local',
     async init() {
-      const mem = read(); let legacy = [];
+      const mem = read(); seen = mem.restored || null; let legacy = [];
       if (!mem.lib) { try { const old = JSON.parse(window.localStorage.getItem('daybook:v1') || '{}') || {}; legacy = Object.keys(old).map(k => old[k]); } catch (e) { legacy = []; } }
       return { lib: mem.lib, pages: Object.assign({}, mem.pages), legacy };
     },
     // another tab saved: hand its journals and pages to the same merge the cloud store uses (unsaved edits here win)
-    subscribe(onLib, onPages) { window.addEventListener('storage', e => { if (e.key !== KEY || !e.newValue) return; const m = read(); if (m.lib) onLib(m.lib); onPages(m.pages); }); },
+    subscribe(onLib, onPages) { window.addEventListener('storage', e => { if (e.key !== KEY || !e.newValue) return; let n = null; try { n = JSON.parse(e.newValue); } catch (x) { /* not ours to read */ }
+      // judged by the event's own value: while this tab's own write is still pending, reading storage here still returns that write
+      if (n && restoredSince(n)) { restoredElsewhere(); return; } const m = read(); if (m.lib) onLib(m.lib); onPages(m.pages); }); },
     async writeLib(lib) { persist(m => { m.lib = clone(lib); }); },
     async writePage(k, d) { persist(m => { if (d) m.pages[k] = clone(d); else delete m.pages[k]; }); },
-    async writeMedia(id, d) { try { window.localStorage.setItem(MK + id, JSON.stringify(d)); } catch (e) { throw fail(e, 'this photo'); } media[id] = d; },
+    async writeMedia(id, d) { mayWrite(); try { window.localStorage.setItem(MK + id, JSON.stringify(d)); } catch (e) { throw fail(e, 'this photo'); } media[id] = d; },
     async readMedia(id) { if (media[id]) return media[id]; try { return JSON.parse(window.localStorage.getItem(MK + id) || 'null'); } catch (e) { return null; } },
-    async deleteMedia(id) { delete media[id]; try { window.localStorage.removeItem(MK + id); } catch (e) { /* ignore */ } }
+    async deleteMedia(id) { mayWrite(); delete media[id]; try { window.localStorage.removeItem(MK + id); } catch (e) { /* ignore */ } },
+    // a restored backup replaces everything stored; if any write fails, exactly what was stored before is put back
+    async replaceAll(lib, pages, newMedia) {
+      const ls = window.localStorage, ours = k => k === KEY || k.indexOf(MK) === 0;
+      const before = {}; Object.keys(ls).filter(ours).forEach(k => { before[k] = ls.getItem(k); });
+      const mark = newId('r'), blob = JSON.stringify({ lib, pages, restored: mark });   // other tabs see the mark and stop saving what they hold
+      try {
+        Object.keys(before).forEach(k => { if (k !== KEY && !newMedia[k.slice(MK.length)]) ls.removeItem(k); });   // old photos go first, to make room
+        Object.keys(newMedia).forEach(id => ls.setItem(MK + id, JSON.stringify(newMedia[id])));
+        ls.setItem(KEY, blob);
+      } catch (e) {
+        let back = true;
+        Object.keys(ls).filter(ours).forEach(k => { if (!(k in before)) ls.removeItem(k); });
+        Object.keys(before).forEach(k => { try { ls.setItem(k, before[k]); } catch (err) { back = false; } });
+        const err = fail(e, 'this backup'); err.partial = !back; throw err;
+      }
+      Object.keys(media).forEach(id => { delete media[id]; });
+      // a tab that saved at the very moment of the restore lands just after it (and misses the mark): once that has settled, write it again
+      // ponytail: one check; a tab saving again within that same instant could still win. localStorage has no compare-and-swap across tabs
+      await new Promise(r => setTimeout(r, 400));
+      if (read().restored !== mark) { try { ls.setItem(KEY, blob); } catch (e) { const err = fail(e, 'this backup'); err.partial = true; throw err; } }
+      return mark;   // the reloaded page checks it is still there before saying the restore worked
+    },
+    get restored() { return seen; }
   };
 }
 async function cloudStore() {
@@ -114,7 +143,27 @@ async function cloudStore() {
     writePage(k, d) { return d ? pagesCol.doc(k).set(d) : pagesCol.doc(k).delete(); },
     writeMedia(id, d) { return mediaCol.doc(id).set(d); },
     async readMedia(id) { const s = await mediaCol.doc(id).get(); return s.exists ? s.data() : null; },
-    deleteMedia(id) { return mediaCol.doc(id).delete(); }
+    deleteMedia(id) { return mediaCol.doc(id).delete(); },
+    // a restored backup replaces everything stored; if a write fails part way, what was there before is written back
+    async replaceAll(lib, pages, newMedia) {
+      const before = { lib: null, pages: {}, media: {} };
+      const l = await libRef.get(); if (l.exists) before.lib = l.data();
+      (await pagesCol.get()).docs.forEach(d => { before.pages[d.id] = d.data(); });
+      (await mediaCol.get()).docs.forEach(d => { before.media[d.id] = d.data(); });
+      const write = async (L, P, M, prev) => {
+        for (const id of Object.keys(M)) await mediaCol.doc(id).set(M[id]);
+        for (const k of Object.keys(P)) await pagesCol.doc(k).set(P[k]);
+        if (L) await libRef.set(L);
+        for (const k of Object.keys(prev.pages)) if (!P[k]) await pagesCol.doc(k).delete();
+        for (const id of Object.keys(prev.media)) if (!M[id]) await mediaCol.doc(id).delete();
+      };
+      try { await write(lib, pages, newMedia, before); }
+      catch (e) {
+        let back = true;
+        try { await write(before.lib, before.pages, before.media, { pages, media: newMedia }); } catch (err) { back = false; }   // the safety copy still holds it
+        throw Object.assign(e instanceof Error ? e : new Error(String(e)), { partial: !back });
+      }
+    }
   };
 }
 function importLegacy(lib, pages, legacy) {
@@ -139,8 +188,14 @@ function queue(fn) {
   });
   return chain;
 }
+// A backup was restored in another tab: this tab holds what was there before, so it saves nothing more and reloads into it.
+function restoredElsewhere() {
+  if (!state.restoring) { state.restoring = true; saveErrShown = true; toast('Daybook was restored from a backup in another tab. Opening it here too…'); setTimeout(() => location.reload(), 1500); }
+  return new Error('Daybook was restored from a backup in another tab.');
+}
 function saveLib(now) {
   clearTimeout(libTimer);
+  if (state.restoring) return;   // a restored backup is being written; the old state must not be saved over it
   const run = () => { libTimer = null; libInflight++; const snap = clone(state.lib); return queue(() => state.store.writeLib(snap)).then(() => { libInflight--; }); };
   if (now) return run();
   libTimer = setTimeout(run, 350);
@@ -148,6 +203,7 @@ function saveLib(now) {
 const pageTimers = new Map();
 function pageIsEmpty(p) { return !p || (!(p.text || '').trim() && !p.mood && !p.style && !(p.items && p.items.length) && !(p.ink && p.ink.length)); }
 function savePage(key, now) {
+  if (state.restoring) return;
   dirtyPages.add(key); editSeq.set(key, (editSeq.get(key) || 0) + 1);
   setSaveState('Saving…');
   clearTimeout(pageTimers.get(key));
@@ -156,6 +212,7 @@ function savePage(key, now) {
 }
 function flushPage(key) {
   clearTimeout(pageTimers.get(key)); pageTimers.delete(key);
+  if (state.restoring) return chain;
   const seq = editSeq.get(key);
   const p = state.pages.get(key);
   const empty = pageIsEmpty(p);

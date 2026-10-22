@@ -195,6 +195,43 @@ function tabSettings(body) {
   body.append(lock);
   body.append(h('div', { class: 'card' }, h('h3', { text: 'Your words' }), h('p', { class: 'note', text: 'Save every journal as one text file you can keep anywhere.' }),
     h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: exportAll }, 'Save a copy of everything'), h('button', { type: 'button', class: 'btn', onclick: () => { closeDrawer(); showWelcome(true); } }, 'Show the welcome tips'))));
+  body.append(backupCard());
+}
+// Full backup: everything in one file, and restoring one. Choosing a file only checks it and shows what it holds;
+// nothing changes until the visitor confirms the replacement.
+function backupCard() {
+  const card = h('div', { class: 'card', id: 'bkCard' }, h('h3', { text: 'Full backup' }),
+    h('p', { class: 'note', text: 'One file with every journal, page, photo, sticker, drawing, room preset and setting. Your PIN stays on this device. Keep it somewhere safe to bring Daybook back later or on another browser.' }));
+  const pick = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'aria-label': 'Choose a Daybook backup file', onchange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; pickBackup(f); } });
+  card.append(pick, h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: exportBackup }, 'Export full backup'), h('button', { type: 'button', class: 'btn', onclick: () => pick.click() }, 'Restore from a backup…')));
+  if (LB.restoreErr) card.append(h('p', { class: 'note bk-msg', role: 'alert', text: LB.restoreErr }));
+  const r = LB.restore;
+  if (r) {
+    const now = {}; for (const [k, v] of state.pages) now[k] = v;
+    const when = r.info.created ? ' made ' + r.info.created.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const box = h('div', { class: 'confirm', role: 'group', 'aria-label': 'Restore preview' },
+      h('p', null, h('b', { text: 'Restore “' + r.name + '”?' })),
+      h('p', { text: 'This backup' + when + ' holds ' + r.info.summary + '.' }),
+      h('p', { text: 'Restoring replaces everything Daybook holds on this device now (' + libSummary(state.lib.journals.length, now, photoIds(state.lib, now).size) + '). A copy of what is here now goes to your downloads first.' }));
+    if (r.info.missing) box.append(h('p', { class: 'note', text: plural(r.info.missing, 'photo') + ' the journals use ' + (r.info.missing > 1 ? 'are' : 'is') + ' not in this backup and will show as empty frames.' }));
+    if (r.info.skipped) box.append(h('p', { class: 'note', text: plural(r.info.skipped, 'page') + ' in this backup belong' + (r.info.skipped > 1 ? '' : 's') + ' to no journal in it and will be left out.' }));
+    box.append(h('div', { class: 'row' },
+      h('button', { type: 'button', class: 'btn danger solid', onclick: async e => { e.currentTarget.disabled = true; try { await restoreBackup(r); } catch (err) { LB.restore = null; LB.restoreErr = err && err.friendly ? err.message : 'Could not restore this backup. Nothing was changed.'; renderDrawer(); scrollBackup(); } } }, 'Replace everything with this backup'),
+      h('button', { type: 'button', class: 'btn', onclick: () => { LB.restore = null; LB.restoreErr = null; renderDrawer(); scrollBackup(); } }, 'Cancel')));
+    card.append(box);
+  }
+  return card;
+}
+function scrollBackup() { const c = $('#bkCard'); if (c) c.scrollIntoView({ block: 'nearest' }); }
+async function pickBackup(file) {
+  if (!file) return;   // the picker was cancelled
+  LB.restore = null; LB.restoreErr = null;
+  try {
+    if (file.size > BACKUP.maxBytes) throw backupError('This file is too large to be a Daybook backup (over 25 MB).');
+    let text; try { text = await file.text(); } catch (e) { throw backupError('Could not read that file.'); }
+    LB.restore = Object.assign(checkBackup(text), { name: file.name });
+  } catch (e) { LB.restoreErr = e && e.friendly ? e.message : 'This file could not be read as a Daybook backup.'; }
+  LB.tab = 'settings'; renderDrawer(); scrollBackup();
 }
 
 /* =====================================================================

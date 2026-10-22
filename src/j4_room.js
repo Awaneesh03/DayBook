@@ -811,7 +811,8 @@ function frame(now) {
   }
 
   // Books animation with safe parabolic clearance arc
-  for (const b of R3.books.values()) {
+  for (const [id, b] of R3.books) {
+    b.mesh.visible = id !== RD.inHand;   // the journal in the reader is drawn there, not on the desk behind it as well
     if (b.t < 1) {
       b.t = Math.min(1, b.t + dt / b.dur);
       const e = ease(b.t);

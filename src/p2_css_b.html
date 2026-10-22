@@ -50,13 +50,17 @@
 
 /* ---------- reader ---------- */
 .reader {
-  position: fixed; inset: 0; z-index: 30; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--scrim);
-  -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
+  position: fixed; inset: 0; z-index: 30; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: transparent;
   padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  opacity: 0; transition: opacity .4s;
+  transition: background-color .4s, -webkit-backdrop-filter .4s, backdrop-filter .4s;
 }
-.reader.show { opacity: 1; }
+/* The scrim and the controls fade; the journal itself never does. It takes over from the one on the desk at once (and
+   hands it back at once), so the 3D cover never shows through a half-faded reader beside this one. */
+.reader.show { background: var(--scrim); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+.reader > .r-top, .reader > .r-bottom { opacity: 0; transition: opacity .4s; }
+.reader.show > .r-top, .reader.show > .r-bottom { opacity: 1; }
+.reader:not(.show) .book { visibility: hidden; }
 body.reading .hud { visibility: hidden; }
 .r-top { display: flex; align-items: center; gap: 10px; padding-block: 12px; min-width: 0; flex-wrap: wrap; }
 .r-title { flex: 1 1 160px; min-width: 0; color: var(--on-scrim); }
@@ -86,15 +90,17 @@ body.reading .hud { visibility: hidden; }
   --pad: 11px; position: relative; aspect-ratio: 1.42; padding: var(--pad); border-radius: 6px 12px 12px 6px; background-color: #333; background-size: 256px;
   width: min(1120px, 100cqw, calc((100cqh - 6px) * 1.42));
   box-shadow: 0 34px 70px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.1), inset 0 0 30px rgba(0,0,0,.35);
-  transform: scale(.94) translateY(12px); transition: transform .6s var(--spring);
+  transform: scale(.94) translateY(12px); transition: transform .6s var(--spring), box-shadow .3s;
 }
 .reader.show .book { transform: none; }
 .reader.single .book { aspect-ratio: .72; width: min(560px, 100cqw, calc((100cqh - 6px) * .72)); border-radius: 4px 12px 12px 4px; }
 .spread { position: relative; height: 100%; display: grid; grid-template-columns: 1fr 1fr; perspective: 2800px; perspective-origin: 50% 40%; }
 .reader.single .spread { grid-template-columns: minmax(0, 1fr); }
 .reader.single .page[data-side="R"] { display: none; }
-.book.opening .page[data-side="L"] { animation: leftIn 1s both; }
-@keyframes leftIn { 0%, 45% { opacity: 0; } 100% { opacity: 1; } }
+/* Two-page view, while the cover swings: there is only the closed book (the right half) until the cover lies on the left,
+   so no bare board or first page sits beside it. (The board image is opaque, so the right half needs no colour.) */
+.reader:not(.single) .book.opening { background-color: transparent !important; background-size: 50% 100%; background-position: right; background-repeat: no-repeat; box-shadow: none; }
+.reader:not(.single) .book.opening .page[data-side="L"] { opacity: 0; }   /* not visibility: the first page takes the caret at 1 s */
 .ribbon { position: absolute; z-index: 3; left: calc(50% - 7px); bottom: -30px; width: 14px; height: 56px; background: var(--ribbon, #8E2A2A); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%); transform-origin: top; animation: sway 4s ease-in-out infinite; }
 @keyframes sway { 50% { transform: rotate(3deg); } }
 .reader.single .ribbon { left: 26px; }
@@ -104,7 +110,12 @@ body.reading .hud { visibility: hidden; }
 .flap .f-front { background-size: 100% 100%; box-shadow: inset 6px 0 14px rgba(0,0,0,.35); }
 .flap .f-back { transform: rotateY(180deg); border-radius: 12px 0 0 12px; background-size: 256px; box-shadow: inset 0 0 0 10px rgba(0,0,0,.25); }
 .flap.opening { animation: flapOpen 1.05s cubic-bezier(.55, .05, .25, 1) forwards; }
-.flap.closing { animation: flapClose .8s cubic-bezier(.55, .05, .25, 1) forwards; }
+/* the inside of the cover fades into the first page once it has landed, and back out of it before closing; the faces
+   fade, not the flap, since opacity on the flap would flatten it and could show the wrong face */
+.flap.landed > div { opacity: 0; transition: opacity .3s; }
+.flap.closing { animation: flapClose .8s .15s cubic-bezier(.55, .05, .25, 1) both; }
+.flap.closing > div { animation: faceIn .15s both; }
+@keyframes faceIn { from { opacity: 0; } }
 @keyframes flapOpen { from { transform: perspective(2400px) rotateY(0); } to { transform: perspective(2400px) rotateY(-179deg); } }
 @keyframes flapClose { from { transform: perspective(2400px) rotateY(-179deg); } to { transform: perspective(2400px) rotateY(0); } }
 

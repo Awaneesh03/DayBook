@@ -224,9 +224,15 @@ function showReader(id, n, pop) {
     // reflow between the classes so the swing restarts even if a close left this animation reversed
     flap.hidden = false; flap.className = 'flap'; void flap.offsetWidth; flap.className = 'flap opening'; book.classList.add('opening');
     setTimeout(() => sfx('flip'), 250);
-    clearTimeout(RD.flapT); RD.flapT = setTimeout(() => { flap.hidden = true; flap.className = 'flap'; book.classList.remove('opening'); }, 1100);
+    // once the cover lies on the left the pages come back under it, and its inside fades into the first page
+    clearTimeout(RD.flapT); RD.flapT = setTimeout(() => {
+      flap.classList.add('landed'); book.classList.remove('opening');
+      RD.flapT = setTimeout(() => { flap.hidden = true; flap.className = 'flap'; }, 300);
+    }, 1050);
   }
-  requestAnimationFrame(() => rd.classList.add('show'));
+  // in the same frame as the desk's copy of this journal goes (showReader runs inside the room's frame), so neither both
+  // nor neither show; the reflow lets the fades start from hidden
+  RD.inHand = id; void rd.offsetWidth; rd.classList.add('show');
   document.body.classList.add('reading');   // hides the room header, which Safari otherwise shows through the reader's scrim
   if (R3) setTimeout(() => { if (RD.open) R3.paused = true; }, 450);
   $('#tip').hidden = true;
@@ -245,7 +251,7 @@ function closeReader() {
   const rd = $('#reader'), flap = $('#flap');
   const finish = () => {
     RD.closing = false;
-    if (!RD.open) { rd.classList.remove('show'); document.body.classList.remove('reading'); }
+    if (!RD.open) { rd.classList.remove('show'); RD.inHand = null; document.body.classList.remove('reading'); }   // the journal goes back to the desk at once
     setTimeout(() => { if (!RD.open) { rd.hidden = true; flap.hidden = true; flap.className = 'flap'; $('#book').classList.remove('opening'); } }, 400);
     if (R3) {
       R3.paused = false;
@@ -259,9 +265,15 @@ function closeReader() {
     // a cover still opening falls back from where it is: the close animation starts fully open, so it would jump
     // across to the left page and sweep back over the open journal. (Not reverse(): a swing that has not started yet
     // rewinds to its end, the same jump. Not playbackRate =: the compositor runs this swing and would skip.)
-    const swing = !flap.hidden && flap.classList.contains('opening') && flap.getAnimations()[0];
-    if (swing) swing.updatePlaybackRate(-1); else { flap.hidden = false; flap.className = 'flap closing'; }
-    sfx('flip'); setTimeout(finish, 650);
+    // (By name: a cover fading after it landed also has a transition running.)
+    const swing = !flap.hidden && flap.classList.contains('opening') && !flap.classList.contains('landed') && flap.getAnimations().find(a => a.animationName === 'flapOpen');
+    if (swing) swing.updatePlaybackRate(-1);
+    else {
+      // the inside of the cover fades in over the first page, then the left half goes once the cover hides it
+      flap.hidden = false; flap.className = 'flap closing';
+      RD.flapT = setTimeout(() => $('#book').classList.add('opening'), 150);
+    }
+    sfx('flip'); setTimeout(finish, swing ? 650 : 800);
   }
   else finish();
   updateHudSub();

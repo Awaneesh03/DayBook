@@ -451,13 +451,17 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
 
 /* ---------- reader ---------- */
 .reader {
-  position: fixed; inset: 0; z-index: 30; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--scrim);
-  -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
+  position: fixed; inset: 0; z-index: 30; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: transparent;
   padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  opacity: 0; transition: opacity .4s;
+  transition: background-color .4s, -webkit-backdrop-filter .4s, backdrop-filter .4s;
 }
-.reader.show { opacity: 1; }
+/* The scrim and the controls fade; the journal itself never does. It takes over from the one on the desk at once (and
+   hands it back at once), so the 3D cover never shows through a half-faded reader beside this one. */
+.reader.show { background: var(--scrim); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+.reader > .r-top, .reader > .r-bottom { opacity: 0; transition: opacity .4s; }
+.reader.show > .r-top, .reader.show > .r-bottom { opacity: 1; }
+.reader:not(.show) .book { visibility: hidden; }
 body.reading .hud { visibility: hidden; }
 .r-top { display: flex; align-items: center; gap: 10px; padding-block: 12px; min-width: 0; flex-wrap: wrap; }
 .r-title { flex: 1 1 160px; min-width: 0; color: var(--on-scrim); }
@@ -487,15 +491,17 @@ body.reading .hud { visibility: hidden; }
   --pad: 11px; position: relative; aspect-ratio: 1.42; padding: var(--pad); border-radius: 6px 12px 12px 6px; background-color: #333; background-size: 256px;
   width: min(1120px, 100cqw, calc((100cqh - 6px) * 1.42));
   box-shadow: 0 34px 70px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.1), inset 0 0 30px rgba(0,0,0,.35);
-  transform: scale(.94) translateY(12px); transition: transform .6s var(--spring);
+  transform: scale(.94) translateY(12px); transition: transform .6s var(--spring), box-shadow .3s;
 }
 .reader.show .book { transform: none; }
 .reader.single .book { aspect-ratio: .72; width: min(560px, 100cqw, calc((100cqh - 6px) * .72)); border-radius: 4px 12px 12px 4px; }
 .spread { position: relative; height: 100%; display: grid; grid-template-columns: 1fr 1fr; perspective: 2800px; perspective-origin: 50% 40%; }
 .reader.single .spread { grid-template-columns: minmax(0, 1fr); }
 .reader.single .page[data-side="R"] { display: none; }
-.book.opening .page[data-side="L"] { animation: leftIn 1s both; }
-@keyframes leftIn { 0%, 45% { opacity: 0; } 100% { opacity: 1; } }
+/* Two-page view, while the cover swings: there is only the closed book (the right half) until the cover lies on the left,
+   so no bare board or first page sits beside it. (The board image is opaque, so the right half needs no colour.) */
+.reader:not(.single) .book.opening { background-color: transparent !important; background-size: 50% 100%; background-position: right; background-repeat: no-repeat; box-shadow: none; }
+.reader:not(.single) .book.opening .page[data-side="L"] { opacity: 0; }   /* not visibility: the first page takes the caret at 1 s */
 .ribbon { position: absolute; z-index: 3; left: calc(50% - 7px); bottom: -30px; width: 14px; height: 56px; background: var(--ribbon, #8E2A2A); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%); transform-origin: top; animation: sway 4s ease-in-out infinite; }
 @keyframes sway { 50% { transform: rotate(3deg); } }
 .reader.single .ribbon { left: 26px; }
@@ -505,7 +511,12 @@ body.reading .hud { visibility: hidden; }
 .flap .f-front { background-size: 100% 100%; box-shadow: inset 6px 0 14px rgba(0,0,0,.35); }
 .flap .f-back { transform: rotateY(180deg); border-radius: 12px 0 0 12px; background-size: 256px; box-shadow: inset 0 0 0 10px rgba(0,0,0,.25); }
 .flap.opening { animation: flapOpen 1.05s cubic-bezier(.55, .05, .25, 1) forwards; }
-.flap.closing { animation: flapClose .8s cubic-bezier(.55, .05, .25, 1) forwards; }
+/* the inside of the cover fades into the first page once it has landed, and back out of it before closing; the faces
+   fade, not the flap, since opacity on the flap would flatten it and could show the wrong face */
+.flap.landed > div { opacity: 0; transition: opacity .3s; }
+.flap.closing { animation: flapClose .8s .15s cubic-bezier(.55, .05, .25, 1) both; }
+.flap.closing > div { animation: faceIn .15s both; }
+@keyframes faceIn { from { opacity: 0; } }
 @keyframes flapOpen { from { transform: perspective(2400px) rotateY(0); } to { transform: perspective(2400px) rotateY(-179deg); } }
 @keyframes flapClose { from { transform: perspective(2400px) rotateY(-179deg); } to { transform: perspective(2400px) rotateY(0); } }
 
@@ -2642,7 +2653,8 @@ function frame(now) {
   }
 
   // Books animation with safe parabolic clearance arc
-  for (const b of R3.books.values()) {
+  for (const [id, b] of R3.books) {
+    b.mesh.visible = id !== RD.inHand;   // the journal in the reader is drawn there, not on the desk behind it as well
     if (b.t < 1) {
       b.t = Math.min(1, b.t + dt / b.dur);
       const e = ease(b.t);
@@ -4530,9 +4542,15 @@ function showReader(id, n, pop) {
     // reflow between the classes so the swing restarts even if a close left this animation reversed
     flap.hidden = false; flap.className = 'flap'; void flap.offsetWidth; flap.className = 'flap opening'; book.classList.add('opening');
     setTimeout(() => sfx('flip'), 250);
-    clearTimeout(RD.flapT); RD.flapT = setTimeout(() => { flap.hidden = true; flap.className = 'flap'; book.classList.remove('opening'); }, 1100);
+    // once the cover lies on the left the pages come back under it, and its inside fades into the first page
+    clearTimeout(RD.flapT); RD.flapT = setTimeout(() => {
+      flap.classList.add('landed'); book.classList.remove('opening');
+      RD.flapT = setTimeout(() => { flap.hidden = true; flap.className = 'flap'; }, 300);
+    }, 1050);
   }
-  requestAnimationFrame(() => rd.classList.add('show'));
+  // in the same frame as the desk's copy of this journal goes (showReader runs inside the room's frame), so neither both
+  // nor neither show; the reflow lets the fades start from hidden
+  RD.inHand = id; void rd.offsetWidth; rd.classList.add('show');
   document.body.classList.add('reading');   // hides the room header, which Safari otherwise shows through the reader's scrim
   if (R3) setTimeout(() => { if (RD.open) R3.paused = true; }, 450);
   $('#tip').hidden = true;
@@ -4551,7 +4569,7 @@ function closeReader() {
   const rd = $('#reader'), flap = $('#flap');
   const finish = () => {
     RD.closing = false;
-    if (!RD.open) { rd.classList.remove('show'); document.body.classList.remove('reading'); }
+    if (!RD.open) { rd.classList.remove('show'); RD.inHand = null; document.body.classList.remove('reading'); }   // the journal goes back to the desk at once
     setTimeout(() => { if (!RD.open) { rd.hidden = true; flap.hidden = true; flap.className = 'flap'; $('#book').classList.remove('opening'); } }, 400);
     if (R3) {
       R3.paused = false;
@@ -4565,9 +4583,15 @@ function closeReader() {
     // a cover still opening falls back from where it is: the close animation starts fully open, so it would jump
     // across to the left page and sweep back over the open journal. (Not reverse(): a swing that has not started yet
     // rewinds to its end, the same jump. Not playbackRate =: the compositor runs this swing and would skip.)
-    const swing = !flap.hidden && flap.classList.contains('opening') && flap.getAnimations()[0];
-    if (swing) swing.updatePlaybackRate(-1); else { flap.hidden = false; flap.className = 'flap closing'; }
-    sfx('flip'); setTimeout(finish, 650);
+    // (By name: a cover fading after it landed also has a transition running.)
+    const swing = !flap.hidden && flap.classList.contains('opening') && !flap.classList.contains('landed') && flap.getAnimations().find(a => a.animationName === 'flapOpen');
+    if (swing) swing.updatePlaybackRate(-1);
+    else {
+      // the inside of the cover fades in over the first page, then the left half goes once the cover hides it
+      flap.hidden = false; flap.className = 'flap closing';
+      RD.flapT = setTimeout(() => $('#book').classList.add('opening'), 150);
+    }
+    sfx('flip'); setTimeout(finish, swing ? 650 : 800);
   }
   else finish();
   updateHudSub();

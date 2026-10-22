@@ -180,6 +180,108 @@ await test('closing while the cover is still opening lets it fall back instead o
   ok(!errs.length, 'page errors: ' + errs.join('; '));
 });
 
+/* ---- one journal at a time while it opens and closes ---- */
+// Every frame: whether the journal is drawn on the desk, whether the reader's journal can be seen, what the cover and the
+// left page look like. Every change of the cover or book as it happens. The room is paused once the cover starts (the
+// reader pauses it soon after anyway) so software WebGL keeps frames coming; the desk copy is already hidden by then.
+const watchBook = (p, id) => p.evaluate(id => {
+  const rd = document.querySelector('#reader'), book = document.querySelector('#book'), flap = document.querySelector('#flap');
+  const w = window.__watch = { frames: [], changes: [], t0: performance.now(), stop: false };
+  const note = what => w.changes.push({ what, t: performance.now() - w.t0, cover: flap.hidden ? null : flap.className, opening: book.classList.contains('opening') });
+  new MutationObserver(() => note('cover')).observe(flap, { attributes: true });
+  new MutationObserver(() => note('book')).observe(book, { attributes: true, attributeFilter: ['class'] });
+  (function tick() {
+    if (RDopen() && !flap.hidden && flap.classList.contains('opening') && !w.paused) { w.paused = true; Daybook.R3.paused = true; }
+    const L = document.querySelector('#spread .page[data-side="L"]'), cs = getComputedStyle(book);
+    w.frames.push({ t: performance.now() - w.t0, desk: Daybook.R3.books.get(id).mesh.visible, reader: !rd.hidden && cs.visibility === 'visible',
+      cover: flap.hidden ? null : flap.className, left: L && getComputedStyle(L).opacity, board: cs.backgroundColor, single: rd.classList.contains('single') });
+    if (!w.stop) requestAnimationFrame(tick);
+  })();
+  function RDopen() { return rd.classList.contains('show'); }
+}, id);
+const stopWatch = p => p.evaluate(() => { window.__watch.stop = true; return window.__watch; });
+const atRest = (p, id) => p.evaluate(id => {
+  const f = document.querySelector('#flap'), b = document.querySelector('#book'), L = document.querySelector('#spread .page[data-side="L"]');
+  return { cover: f.hidden && f.className === 'flap', opening: b.classList.contains('opening'), left: getComputedStyle(L).opacity, desk: Daybook.R3.books.get(id).mesh.visible, reader: !document.querySelector('#reader').hidden };
+}, id);
+const oneAtATime = w => { const bad = w.frames.filter(f => f.desk === f.reader); return bad.length ? `${bad.length} frame(s) showed ${bad[0].desk ? 'both the desk journal and the reader' : 'neither journal'} (first at ${bad[0].t.toFixed(0)} ms)` : ''; };
+
+await test('opening shows one journal at a time, nothing beside the closed cover, and the cover fades into the first page', async (p, errs) => {
+  const id = await firstId(p);
+  await watchBook(p, id);
+  await p.evaluate(i => Daybook.openJournal(i), id);
+  await p.waitForFunction(() => document.querySelector('#reader.show') && document.querySelector('#flap').hidden, null, { timeout: 30000 });
+  const w = await stopWatch(p);
+  const both = oneAtATime(w); ok(!both, both);
+  const swinging = w.frames.filter(f => f.cover && f.cover.includes('opening') && !f.cover.includes('landed'));
+  ok(swinging.length, 'no frame caught the cover swinging');
+  const beside = swinging.find(f => f.left !== '0' || f.board !== 'rgba(0, 0, 0, 0)');
+  ok(!beside, 'a page or bare board sat beside the swinging cover: ' + JSON.stringify(beside));
+  const landed = w.changes.find(c => c.cover && c.cover.includes('landed')), gone = w.changes.find(c => c.what === 'cover' && c.cover === null);
+  ok(landed && gone && gone.t > landed.t, 'the cover was taken away without first fading into the page: ' + JSON.stringify(w.changes.filter(c => c.what === 'cover')));
+  ok(!landed.opening && gone.t - landed.t >= 250, 'the pages must be back under the landed cover, and it must fade (' + (gone.t - landed.t).toFixed(0) + ' ms)');
+  const end = await atRest(p, id);
+  ok(end.cover && !end.opening && end.left === '1' && end.desk === false && end.reader, 'final state: ' + JSON.stringify(end));
+  ok(await p.evaluate(() => document.activeElement === document.querySelector('#spread .page[data-side="L"] textarea')), 'the first page should have the caret once the journal is open');
+  ok(!errs.length, 'page errors: ' + errs.join('; '));
+});
+
+await test('closing fades the cover in over the page, then hands the journal back to the desk without showing both', async (p, errs) => {
+  const id = await firstId(p);
+  await p.evaluate(i => Daybook.openJournal(i), id);
+  await opened(p);
+  await p.waitForFunction(() => document.querySelector('#flap').hidden, null, { timeout: 15000 });
+  await watchBook(p, id);
+  await p.evaluate(() => Daybook.closeReader());
+  await closed(p);
+  const w = await stopWatch(p);
+  const both = oneAtATime(w); ok(!both, both);
+  const start = w.changes.find(c => c.cover && c.cover.includes('closing')), gone = w.changes.find(c => c.what === 'book' && c.opening);
+  ok(start && !start.opening, 'the left page went before the cover was over it');
+  ok(gone && gone.t - start.t >= 100, 'the left page should go only once the cover has faded in over it: ' + JSON.stringify(w.changes));
+  const end = await atRest(p, id);
+  ok(end.cover && !end.opening && end.desk === true && !end.reader, 'final state: ' + JSON.stringify(end));
+  ok(!errs.length, 'page errors: ' + errs.join('; '));
+});
+
+await test('Escape just as the cover lands, then opening again at once, ends in one clean open journal', async (p, errs) => {
+  const id = await firstId(p);
+  await watchBook(p, id);
+  // the landed fade lasts 300 ms, too short to catch by polling frames in software WebGL: press Escape the moment it starts
+  await p.evaluate(i => {
+    const f = document.querySelector('#flap');
+    const mo = new MutationObserver(() => {
+      if (!f.classList.contains('landed')) return;
+      mo.disconnect(); window.__escAt = 'landed';
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      Daybook.openJournal(i);
+    });
+    mo.observe(f, { attributes: true });
+    Daybook.openJournal(i);
+  }, id);
+  await p.waitForFunction(() => window.__escAt === 'landed', null, { timeout: 30000 });
+  await p.waitForFunction(() => document.querySelector('#reader.show') && document.querySelector('#flap').hidden && !document.querySelector('#book.opening') && Daybook.R3.paused, null, { timeout: 30000 });
+  await p.waitForTimeout(500);
+  const w = await stopWatch(p);
+  const both = oneAtATime(w); ok(!both, both);
+  const end = await atRest(p, id);
+  ok(end.cover && !end.opening && end.left === '1' && end.desk === false && end.reader, 'final state: ' + JSON.stringify(end));
+  ok(await p.evaluate(() => document.querySelectorAll('#reader.show').length === 1 && getComputedStyle(document.querySelector('#flap .f-front')).opacity === '1'), 'the cover faces must be back to normal for the next opening');
+  ok(!errs.length, 'page errors: ' + errs.join('; '));
+});
+
+await test('on a phone the one page stays in place under the opening cover, and only one journal shows', async (p, errs) => {
+  const id = await firstId(p);
+  await watchBook(p, id);
+  await p.evaluate(i => Daybook.openJournal(i), id);
+  await p.waitForFunction(() => document.querySelector('#reader.show') && document.querySelector('#flap').hidden, null, { timeout: 30000 });
+  const w = await stopWatch(p);
+  const both = oneAtATime(w); ok(!both, both);
+  const swinging = w.frames.filter(f => f.cover && f.cover.includes('opening'));
+  ok(swinging.length && swinging.every(f => f.single && f.left === '1' && f.board !== 'rgba(0, 0, 0, 0)'), 'the page or board was hidden in one-page view: ' + JSON.stringify(swinging.find(f => !(f.single && f.left === '1'))));
+  ok(!errs.length, 'page errors: ' + errs.join('; '));
+}, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
 /* ---- looking out of the window ---- */
 // where the window's left pane is on screen (CSS pixels), once a frame has used the current camera
 const windowAt = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => {

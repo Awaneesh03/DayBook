@@ -1116,6 +1116,7 @@ function bindPointer() {
     }
     if (!d.moved && e.type === 'pointerup') {
       const o = pick(e.clientX, e.clientY);
+      R3.tapAt = [e.clientX, e.clientY];   // object pop-ups open beside it
       if (o) onAct(o.userData.act);
     }
   };

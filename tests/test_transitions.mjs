@@ -243,6 +243,35 @@ await test('a peek parts drawn curtains only while looking, and leaves free expl
   ok(!errs.length, 'page errors: ' + errs.join('; '));
 });
 
+// object pop-ups used to open unstyled in the top-left corner over the title, wherever the object was; on a phone the
+// tap that opens one must not also press the button that appears under the finger
+await test('an object pop-up opens styled beside the object, and its opening tap cannot press a button', async (p, errs) => {
+  const [x, y] = await windowAt(p);
+  await p.mouse.click(x, y);
+  const s = await p.evaluate(([x, y]) => { const pop = document.querySelector('#roomActionPop'), r = pop.getBoundingClientRect(); return { open: !pop.hidden, head: !!pop.querySelector('.room-pop-head'), actions: !!pop.querySelector('.room-pop-actions'), guard: pop.style.pointerEvents, covers: x >= r.left && x <= r.right && y >= r.top && y <= r.bottom, top: parseInt(pop.style.top) }; }, [x, y]);
+  ok(s.open && s.head && s.actions, 'pop-up is missing its styled parts: ' + JSON.stringify(s));
+  ok(!s.covers && s.top >= 70, 'pop-up should be placed beside the click, below the header (its set position, not mid drop-in animation): ' + JSON.stringify(s));
+  ok(s.guard === 'none', 'the opening tap should not reach the buttons');
+  await p.waitForFunction(() => document.querySelector('#roomActionPop').style.pointerEvents === '', null, { timeout: 3000 });
+  ok(!errs.length, 'page errors: ' + errs.join('; '));
+});
+
+// the animated ink wrapped each UTF-16 code unit in its own span, so emoji showed as broken halves (Safari) or lost
+// their joined parts; and Safari showed the room header through the reader's backdrop
+await test('emoji typed with animated ink stay whole, and the room header hides behind the reader', async (p, errs) => {
+  await p.evaluate(i => Daybook.openJournal(i), await firstId(p));
+  await opened(p);
+  await p.locator('#reader textarea:visible').first().focus();
+  await p.keyboard.type('moon \u{1F319} team \u{1F469}‍\u{1F4BB} end');
+  const ink = await p.evaluate(() => { const spans = [...document.querySelector('#reader .page')._ink.querySelectorAll('span')].map(s => s.textContent); return { lone: spans.filter(t => /^[\uD800-\uDFFF]$/.test(t)).length, joined: spans.includes('\u{1F469}‍\u{1F4BB}'), hud: getComputedStyle(document.querySelector('.hud')).visibility }; });
+  ok(!ink.lone && ink.joined, 'ink split an emoji: ' + JSON.stringify(ink));
+  ok(ink.hud === 'hidden', 'the room header should be hidden while reading');
+  await p.evaluate(() => Daybook.closeReader());
+  await closed(p);
+  ok(await p.evaluate(() => getComputedStyle(document.querySelector('.hud')).visibility === 'visible'), 'the room header should come back');
+  ok(!errs.length, 'page errors: ' + errs.join('; '));
+});
+
 await browser.close();
 console.log(failed ? `\n${failed} test(s) failed` : '\nall passed');
 process.exit(failed ? 1 : 0);

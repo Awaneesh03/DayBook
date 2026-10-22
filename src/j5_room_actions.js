@@ -528,13 +528,13 @@ function toggleClockSec() {
 function openRoomActionPop(title, sub, actions) {
   const pop = $('#roomActionPop'); if (!pop) return;
   pop.textContent = '';
-  const head = h('div', { class: 'pop-head' },
+  const head = h('div', { class: 'room-pop-head' },
     h('h3', { text: title }),
     h('button', { type: 'button', class: 'x', 'aria-label': 'Close', onclick: closeRoomActionPop }, '×')
   );
   pop.append(head);
-  if (sub) pop.append(h('div', { class: 'pop-sub', text: sub }));
-  const actContainer = h('div', { class: 'action-btns' });
+  if (sub) pop.append(h('div', { class: 'room-pop-desc', text: sub }));
+  const actContainer = h('div', { class: 'room-pop-actions' });
   actions.forEach(a => {
     const b = h('button', {
       type: 'button',
@@ -545,6 +545,17 @@ function openRoomActionPop(title, sub, actions) {
   });
   pop.append(actContainer);
   pop.hidden = false;
+  // the tap that opened it must not also press whichever button now sits under the finger
+  pop.style.pointerEvents = 'none'; clearTimeout(pop._tapGuard); pop._tapGuard = setTimeout(() => { pop.style.pointerEvents = ''; }, 350);
+  // next to the object that was clicked and kept on screen; narrow screens get it as a sheet along the bottom
+  const at = R3 && R3.tapAt, W = window.innerWidth, H = window.innerHeight;
+  pop.style.left = pop.style.top = '';
+  pop.classList.toggle('docked', !at || W < 560);
+  if (at && W >= 560) {
+    const r = pop.getBoundingClientRect();
+    pop.style.left = Math.round(clamp(at[0] + 20 + r.width < W - 12 ? at[0] + 20 : at[0] - 20 - r.width, 12, W - r.width - 12)) + 'px';
+    pop.style.top = Math.round(clamp(at[1] - r.height / 2, 76, Math.max(76, H - r.height - 12))) + 'px';
+  }
 }
 function closeRoomActionPop() {
   const pop = $('#roomActionPop'); if (pop) pop.hidden = true;

@@ -29,7 +29,10 @@ and passing a path tests another build instead of `index.html`.
 - Drifting Clouds only dims the sky, and Starry Twilight looks like a clear night.
 - Changes synced from another tab or device are stored, but the room and sound only pick them up after a reload.
 - Tour stops assume the default desk layout; objects moved in arrange mode can fall outside a stop's frame.
-- On phones 460 px wide or narrower, the room view offers no way to Look outside, and the peek bar's label wraps there.
+- On portrait phones the room view shows only the middle of the room, and at 460 px or narrower some header buttons move into
+  the Library (Settings has "Customize 3D room", which also leads to Look outside). The peek bar's label wraps on phones.
+- Journals live in the browser (about 5 MB, photos use most of it). Clearing browsing data erases them, so the Library suggests
+  saving a copy now and then.
 - Entries made before the charset fix, on a page served without a charset, may hold garbled template boxes or stickers
   (`â˜`, `ðŸŒ™`). Typed text was never affected, and nothing repairs these automatically.
-- Tested in Google Chrome only (software rendering in headless mode).
+- Tested in Google Chrome and WebKit (Safari's engine), at desktop and phone sizes; not yet on real phones or in Firefox.

@@ -1,5 +1,11 @@
+<!doctype html>
+<html lang="en">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Daybook</title>
+<meta name="description" content="A cozy 3D study for journaling. Write with a pen that feels real, decorate your pages, design your own covers and keep a daily writing habit.">
+<meta name="theme-color" content="#1E1C25">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='6' width='44' height='52' rx='6' fill='%231F3A6B'/%3E%3Crect x='10' y='6' width='9' height='52' rx='3' fill='%23162B52'/%3E%3Ccircle cx='38' cy='31' r='11' fill='%23E2B65C'/%3E%3Ccircle cx='43' cy='27' r='10' fill='%231F3A6B'/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Dancing+Script:wght@500;700&family=Homemade+Apple&family=Kalam:wght@300;400&family=Manrope:wght@400;500;600;700&family=Nanum+Brush+Script&family=Patrick+Hand&family=Pinyon+Script&family=Reenie+Beanie&family=Special+Elite&display=swap">
 <style>
@@ -158,7 +164,7 @@ body.no3d { background: radial-gradient(ellipse at 50% 20%, #3A3446, var(--room)
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .sw { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(0,0,0,.18); padding: 0; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); transition: transform .2s var(--spring); }
 .sw:hover { transform: scale(1.1); }
-.sw[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sw[aria-pressed="true"], .sw.custom.on { outline: 2px solid var(--ink); outline-offset: 2px; }
 .sw.custom { position: relative; overflow: hidden; background: conic-gradient(#e44, #ec4, #4c6, #4ae, #84e, #e44); }
 .sw.custom input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .fld { display: flex; flex-direction: column; gap: 6px; }
@@ -348,10 +354,18 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
 .room-pop-actions { display: flex; flex-direction: column; gap: 8px; }
 .room-pop-actions .btn { justify-content: flex-start; text-align: left; }
 .room-pop-actions .btn svg { width: 18px; height: 18px; flex: none; }
+.room-pop.docked { left: 12px; right: 12px; top: auto; bottom: max(12px, env(safe-area-inset-bottom, 0px)); width: auto; }
 
 /* ---------- Room Customizer Modal & Presets ---------- */
-.panel.customizer { width: min(640px, 100%); max-height: min(85vh, 760px); display: flex; flex-direction: column; }
+.panel.customizer { width: min(720px, 100%); max-height: min(85vh, 760px); display: flex; flex-direction: column; }
+#rcTabs { flex: none; }   /* never squeezed by the column on short screens, which would clip wrapped tabs */
+@media (max-width: 760px) { #rcTabs { flex-wrap: wrap; } }   /* all six tabs stay visible, none hidden behind a sideways scroll */
 .customizer-body { overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+/* a setting: its name and what it does on the left, its switch or button on the right */
+.rc-field { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.rc-field-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rc-field-title { font-weight: 700; font-size: 13.5px; }
+.rc-field-desc { font-size: 12px; line-height: 1.4; color: var(--muted); }
 .custom-section { display: flex; flex-direction: column; gap: 10px; }
 .custom-section h4 { margin: 0; font: 600 16px var(--display); color: var(--ink); border-bottom: 1px solid var(--line); padding-bottom: 4px; }
 .swatches-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; }

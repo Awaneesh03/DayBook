@@ -1,5 +1,11 @@
+<!doctype html>
+<html lang="en">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Daybook</title>
+<meta name="description" content="A cozy 3D study for journaling. Write with a pen that feels real, decorate your pages, design your own covers and keep a daily writing habit.">
+<meta name="theme-color" content="#1E1C25">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='6' width='44' height='52' rx='6' fill='%231F3A6B'/%3E%3Crect x='10' y='6' width='9' height='52' rx='3' fill='%23162B52'/%3E%3Ccircle cx='38' cy='31' r='11' fill='%23E2B65C'/%3E%3Ccircle cx='43' cy='27' r='10' fill='%231F3A6B'/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Dancing+Script:wght@500;700&family=Homemade+Apple&family=Kalam:wght@300;400&family=Manrope:wght@400;500;600;700&family=Nanum+Brush+Script&family=Patrick+Hand&family=Pinyon+Script&family=Reenie+Beanie&family=Special+Elite&display=swap">
 <style>
@@ -158,7 +164,7 @@ body.no3d { background: radial-gradient(ellipse at 50% 20%, #3A3446, var(--room)
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .sw { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(0,0,0,.18); padding: 0; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); transition: transform .2s var(--spring); }
 .sw:hover { transform: scale(1.1); }
-.sw[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sw[aria-pressed="true"], .sw.custom.on { outline: 2px solid var(--ink); outline-offset: 2px; }
 .sw.custom { position: relative; overflow: hidden; background: conic-gradient(#e44, #ec4, #4c6, #4ae, #84e, #e44); }
 .sw.custom input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .fld { display: flex; flex-direction: column; gap: 6px; }
@@ -348,10 +354,18 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
 .room-pop-actions { display: flex; flex-direction: column; gap: 8px; }
 .room-pop-actions .btn { justify-content: flex-start; text-align: left; }
 .room-pop-actions .btn svg { width: 18px; height: 18px; flex: none; }
+.room-pop.docked { left: 12px; right: 12px; top: auto; bottom: max(12px, env(safe-area-inset-bottom, 0px)); width: auto; }
 
 /* ---------- Room Customizer Modal & Presets ---------- */
-.panel.customizer { width: min(640px, 100%); max-height: min(85vh, 760px); display: flex; flex-direction: column; }
+.panel.customizer { width: min(720px, 100%); max-height: min(85vh, 760px); display: flex; flex-direction: column; }
+#rcTabs { flex: none; }   /* never squeezed by the column on short screens, which would clip wrapped tabs */
+@media (max-width: 760px) { #rcTabs { flex-wrap: wrap; } }   /* all six tabs stay visible, none hidden behind a sideways scroll */
 .customizer-body { overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+/* a setting: its name and what it does on the left, its switch or button on the right */
+.rc-field { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.rc-field-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rc-field-title { font-weight: 700; font-size: 13.5px; }
+.rc-field-desc { font-size: 12px; line-height: 1.4; color: var(--muted); }
 .custom-section { display: flex; flex-direction: column; gap: 10px; }
 .custom-section h4 { margin: 0; font: 600 16px var(--display); color: var(--ink); border-bottom: 1px solid var(--line); padding-bottom: 4px; }
 .swatches-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; }
@@ -443,6 +457,7 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
   opacity: 0; transition: opacity .4s;
 }
 .reader.show { opacity: 1; }
+body.reading .hud { visibility: hidden; }
 .r-top { display: flex; align-items: center; gap: 10px; padding-block: 12px; min-width: 0; flex-wrap: wrap; }
 .r-title { flex: 1 1 160px; min-width: 0; color: var(--on-scrim); }
 .r-title b { display: block; font: 600 24px/1.1 var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -512,11 +527,15 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
 .p-date.dim { opacity: .5; }
 .p-date input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .p-date input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: auto; height: auto; margin: 0; padding: 0; cursor: pointer; }
-.p-mood { display: flex; align-items: center; gap: 5px; flex: none; }
-.p-mood button { width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--ink-c); background: transparent; padding: 0; opacity: .45; transition: transform .25s var(--spring), opacity .2s; }
-.p-mood button[aria-pressed="true"] { background: var(--ink-c); opacity: 1; transform: scale(1.18); }
+.p-mood { display: flex; align-items: center; gap: 0; flex: none; }
+/* a 24px target (easy to tap) around the same 17px ring */
+.p-mood button { position: relative; width: 24px; height: 24px; border-radius: 50%; border: 0; background: transparent; padding: 0; opacity: .45; transition: transform .25s var(--spring), opacity .2s; }
+.p-mood button::before { content: ""; position: absolute; inset: 3.5px; border-radius: 50%; border: 1.5px solid var(--ink-c); }
+.p-mood button[aria-pressed="true"] { opacity: 1; transform: scale(1.18); }
+.p-mood button[aria-pressed="true"]::before { background: var(--ink-c); }
 .p-mood button:hover { opacity: .9; transform: scale(1.12); }
 .p-mood-t { font-family: var(--pen-font); font-size: calc(var(--pen-size) * .7); min-width: 2.6em; text-align: right; opacity: .8; }
+@media (max-width: 380px) { .p-mood-t { display: none; } }   /* the filled dot shows the mood; the date needs the room */
 .p-write { position: relative; z-index: 2; flex: 1 1 auto; min-height: 0; }
 .p-body, .p-ink {
   position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; border: 0; padding: 0 2px;
@@ -803,7 +822,7 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
     <button type="button" role="tab" data-dt="insights" aria-selected="false">Insights</button>
     <button type="button" role="tab" data-dt="settings" aria-selected="false">Settings</button>
   </div>
-  <div class="dr-body" id="drBody"></div>
+  <div class="dr-body" id="drBody" tabindex="0"></div>
 </aside>
 
 <!-- Reader -->
@@ -830,9 +849,9 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
     </div>
   </div>
   <div class="r-bottom" id="rBottom">
-    <button type="button" class="hb" id="rPrev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>Previous</span></button>
+    <button type="button" class="hb" id="rPrev" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>Previous</span></button>
     <div class="goal" id="goal" title="Words written today"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="g-bg" cx="18" cy="18" r="15"/><circle class="g-fg" id="goalArc" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="0 100"/></svg><span><b id="goalTxt"></b><i id="rStatus" style="font-style:normal"></i></span></div>
-    <button type="button" class="hb" id="rNext"><span>Next page</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button type="button" class="hb" id="rNext" aria-label="Next page"><span>Next page</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
   </div>
   <div class="drawbar" id="drawbar" hidden></div>
   <section class="pop" id="pop" hidden aria-live="polite"></section>
@@ -1621,22 +1640,25 @@ const S = () => (state.lib ? state.lib.settings : SETTINGS_DEFAULT);
 
 function localStore() {
   const KEY = 'daybook3d:v1', MK = 'daybook3d:m:';
-  let mem = { lib: null, pages: {} };
-  try { const raw = window.localStorage.getItem(KEY); if (raw) mem = JSON.parse(raw) || mem; } catch (e) { /* private mode */ }
-  if (!mem.pages) mem.pages = {};
+  // what is stored right now: another tab may have saved since this one loaded
+  const read = () => { let m = null; try { m = JSON.parse(window.localStorage.getItem(KEY) || 'null'); } catch (e) { /* private mode or unreadable */ } m = m && typeof m === 'object' ? m : { lib: null, pages: {} }; if (!m.pages) m.pages = {}; return m; };
+  // a write that did not happen has to reach the save queue ("Not saved yet"), never look saved
+  const fail = (e, what) => { const err = new Error(/quota/i.test((e && e.name) + ' ' + (e && e.message)) ? 'Your browser has no room left to save ' + what + '. Save a copy of your journals (Library, Settings), then remove some photos to make space.' : 'Your browser is not letting Daybook save ' + what + '. Check that this site is allowed to store data.'); err.friendly = true; return err; };
+  // change only this part of what is stored, so journals and pages saved by another tab are kept
+  const persist = change => { const m = read(); change(m); try { window.localStorage.setItem(KEY, JSON.stringify(m)); } catch (e) { throw fail(e, 'your changes'); } };
   const media = {};
-  const persist = () => { try { window.localStorage.setItem(KEY, JSON.stringify(mem)); } catch (e) { /* storage full: keep in memory */ } };
   return {
     kind: 'local',
     async init() {
-      let legacy = [];
+      const mem = read(); let legacy = [];
       if (!mem.lib) { try { const old = JSON.parse(window.localStorage.getItem('daybook:v1') || '{}') || {}; legacy = Object.keys(old).map(k => old[k]); } catch (e) { legacy = []; } }
       return { lib: mem.lib, pages: Object.assign({}, mem.pages), legacy };
     },
-    subscribe() {},
-    async writeLib(lib) { mem.lib = clone(lib); persist(); },
-    async writePage(k, d) { if (d) mem.pages[k] = clone(d); else delete mem.pages[k]; persist(); },
-    async writeMedia(id, d) { media[id] = d; try { window.localStorage.setItem(MK + id, JSON.stringify(d)); } catch (e) { /* kept for this visit */ } },
+    // another tab saved: hand its journals and pages to the same merge the cloud store uses (unsaved edits here win)
+    subscribe(onLib, onPages) { window.addEventListener('storage', e => { if (e.key !== KEY || !e.newValue) return; const m = read(); if (m.lib) onLib(m.lib); onPages(m.pages); }); },
+    async writeLib(lib) { persist(m => { m.lib = clone(lib); }); },
+    async writePage(k, d) { persist(m => { if (d) m.pages[k] = clone(d); else delete m.pages[k]; }); },
+    async writeMedia(id, d) { try { window.localStorage.setItem(MK + id, JSON.stringify(d)); } catch (e) { throw fail(e, 'this photo'); } media[id] = d; },
     async readMedia(id) { if (media[id]) return media[id]; try { return JSON.parse(window.localStorage.getItem(MK + id) || 'null'); } catch (e) { return null; } },
     async deleteMedia(id) { delete media[id]; try { window.localStorage.removeItem(MK + id); } catch (e) { /* ignore */ } }
   };
@@ -1687,9 +1709,9 @@ function importLegacy(lib, pages, legacy) {
 let libTimer = null, libInflight = 0, chain = Promise.resolve(), saveErrShown = false;
 function setSaveState(t) { const el = $('#rStatus'); if (el) el.textContent = t; }
 function queue(fn) {
-  chain = chain.then(fn).catch(() => {
+  chain = chain.then(fn).catch(e => {
     setSaveState('Not saved yet');
-    if (!saveErrShown) { saveErrShown = true; toast('Could not save just now. Your words stay on screen and will save on the next change.'); setTimeout(() => { saveErrShown = false; }, 15000); }
+    if (!saveErrShown) { saveErrShown = true; toast(e && e.friendly ? e.message : 'Could not save just now. Your words stay on screen and will save on the next change.'); setTimeout(() => { saveErrShown = false; }, 15000); }
   });
   return chain;
 }
@@ -2867,6 +2889,7 @@ function bindPointer() {
     }
     if (!d.moved && e.type === 'pointerup') {
       const o = pick(e.clientX, e.clientY);
+      R3.tapAt = [e.clientX, e.clientY];   // object pop-ups open beside it
       if (o) onAct(o.userData.act);
     }
   };
@@ -3430,13 +3453,13 @@ function toggleClockSec() {
 function openRoomActionPop(title, sub, actions) {
   const pop = $('#roomActionPop'); if (!pop) return;
   pop.textContent = '';
-  const head = h('div', { class: 'pop-head' },
+  const head = h('div', { class: 'room-pop-head' },
     h('h3', { text: title }),
     h('button', { type: 'button', class: 'x', 'aria-label': 'Close', onclick: closeRoomActionPop }, '×')
   );
   pop.append(head);
-  if (sub) pop.append(h('div', { class: 'pop-sub', text: sub }));
-  const actContainer = h('div', { class: 'action-btns' });
+  if (sub) pop.append(h('div', { class: 'room-pop-desc', text: sub }));
+  const actContainer = h('div', { class: 'room-pop-actions' });
   actions.forEach(a => {
     const b = h('button', {
       type: 'button',
@@ -3447,6 +3470,17 @@ function openRoomActionPop(title, sub, actions) {
   });
   pop.append(actContainer);
   pop.hidden = false;
+  // the tap that opened it must not also press whichever button now sits under the finger
+  pop.style.pointerEvents = 'none'; clearTimeout(pop._tapGuard); pop._tapGuard = setTimeout(() => { pop.style.pointerEvents = ''; }, 350);
+  // next to the object that was clicked and kept on screen; narrow screens get it as a sheet along the bottom
+  const at = R3 && R3.tapAt, W = window.innerWidth, H = window.innerHeight;
+  pop.style.left = pop.style.top = '';
+  pop.classList.toggle('docked', !at || W < 560);
+  if (at && W >= 560) {
+    const r = pop.getBoundingClientRect();
+    pop.style.left = Math.round(clamp(at[0] + 20 + r.width < W - 12 ? at[0] + 20 : at[0] - 20 - r.width, 12, W - r.width - 12)) + 'px';
+    pop.style.top = Math.round(clamp(at[1] - r.height / 2, 76, Math.max(76, H - r.height - 12))) + 'px';
+  }
 }
 function closeRoomActionPop() {
   const pop = $('#roomActionPop'); if (pop) pop.hidden = true;
@@ -4274,11 +4308,20 @@ function trackInsert(el, next, stagger) {
   el._prev = next;
   return inserted;
 }
+// where each visible character starts: an emoji is two code units (or several joined ones) and must never be split
+// across ink spans, or it shows as broken halves
+const graphemes = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter() : null;
+function charStarts(text) {
+  if (graphemes) return Array.from(graphemes.segment(text), s => s.index);
+  const s = []; for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); if (c < 0xDC00 || c > 0xDFFF) s.push(i); } return s;
+}
 function renderInk(el) {
   const ta = el._ta, ink = el._ink, text = ta.value, now = performance.now();
   el._fresh = el._fresh.filter(f => f.t > now - 700 && f.i < text.length);
   const caret = document.activeElement === ta ? ta.selectionEnd : -1;
-  const fm = new Map(el._fresh.map(f => [f.i, f.t]));
+  const starts = charStarts(text), end = new Map(starts.map((s, k) => [s, k + 1 < starts.length ? starts[k + 1] : text.length]));
+  const startOf = i => { let lo = 0, hi = starts.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (starts[m] <= i) lo = m; else hi = m - 1; } return starts[lo]; };
+  const fm = new Map(); for (const f of el._fresh) { const s = startOf(f.i); if (!fm.has(s) || f.t < fm.get(s)) fm.set(s, f.t); }
   const idxs = Array.from(new Set(Array.from(fm.keys()).concat(caret >= 0 ? [caret] : []))).sort((x, y) => x - y);
   const frag = document.createDocumentFragment(); let pos = 0, mark = null; const spans = [];
   for (const i of idxs) {
@@ -4286,7 +4329,7 @@ function renderInk(el) {
     if (i > pos) frag.append(text.slice(pos, i));
     pos = i;
     if (i === caret) { mark = document.createElement('span'); mark.textContent = '⁠'; frag.append(mark); }
-    if (fm.has(i)) { const s = document.createElement('span'); s.className = 'nw'; s.textContent = text[i]; const t = fm.get(i); s.style.animationDelay = Math.round(t - now) + 'ms'; s._t = t; frag.append(s); spans.push(s); pos = i + 1; }
+    if (fm.has(i)) { const s = document.createElement('span'); s.className = 'nw'; s.textContent = text.slice(i, end.get(i)); const t = fm.get(i); s.style.animationDelay = Math.round(t - now) + 'ms'; s._t = t; frag.append(s); spans.push(s); pos = end.get(i); }
   }
   if (pos < text.length) frag.append(text.slice(pos));
   frag.append('⁠');
@@ -4398,7 +4441,8 @@ function renderReader(soft) {
   updateCount();
   $('#rPrev').disabled = RD.n <= 1;
   const lastVisible = single ? RD.n : RD.n + 1;
-  $('#rNext').querySelector('span').textContent = lastVisible >= j.pages ? 'New page' : 'Next page';
+  const nextLabel = lastVisible >= j.pages ? 'New page' : 'Next page';   // the label also names the button when phones hide the text
+  $('#rNext').querySelector('span').textContent = nextLabel; $('#rNext').setAttribute('aria-label', nextLabel);
   updateGoal();
   if (!soft && RD.pop) renderPop();
   if (RD.drawing) renderDrawbar();
@@ -4431,6 +4475,7 @@ function showReader(id, n, pop) {
     clearTimeout(RD.flapT); RD.flapT = setTimeout(() => { flap.hidden = true; flap.className = 'flap'; book.classList.remove('opening'); }, 1100);
   }
   requestAnimationFrame(() => rd.classList.add('show'));
+  document.body.classList.add('reading');   // hides the room header, which Safari otherwise shows through the reader's scrim
   if (R3) setTimeout(() => { if (RD.open) R3.paused = true; }, 450);
   $('#tip').hidden = true;
   setSaveState(state.store && state.store.kind === 'cloud' ? 'Saved to your account' : 'Saved in this browser');
@@ -4448,7 +4493,7 @@ function closeReader() {
   const rd = $('#reader'), flap = $('#flap');
   const finish = () => {
     RD.closing = false;
-    if (!RD.open) rd.classList.remove('show');
+    if (!RD.open) { rd.classList.remove('show'); document.body.classList.remove('reading'); }
     setTimeout(() => { if (!RD.open) { rd.hidden = true; flap.hidden = true; flap.className = 'flap'; $('#book').classList.remove('opening'); } }, 400);
     if (R3) {
       R3.paused = false;
@@ -4774,7 +4819,11 @@ function journalMarkdown(j) {
   return { out, count: pages.length };
 }
 async function saveFile(name, data) {
-  if (!downloadsApi) { toast('Saving files is not available in this view.'); return; }
+  if (!downloadsApi) {   // outside Claude: an ordinary browser download
+    const a = h('a', { href: URL.createObjectURL(new Blob([data], { type: 'text/markdown;charset=utf-8' })), download: name, hidden: true });
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast('Saved a copy to your downloads.'); return;
+  }
   try { await downloadsApi.save({ filename: name, data }); toast('Copy saved.'); }
   catch (e) { if (!e || e.code !== 'declined') toast('Could not save a copy from here.'); }
 }
@@ -4822,7 +4871,7 @@ function swRow(container, colors, current, onPick, custom) {
     const inp = h('input', { type: 'color', value: current && current[0] === '#' && current.length === 7 ? current : '#888888', 'aria-label': 'Pick any colour' });
     inp.addEventListener('input', () => onPick(inp.value, true)); inp.addEventListener('change', () => onPick(inp.value, false));
     const isCustom = !colors.some(c => String(c).toLowerCase() === String(current || '').toLowerCase());
-    container.append(h('span', { class: 'sw custom', title: 'Any colour', 'aria-pressed': isCustom ? 'true' : 'false' }, inp));
+    container.append(h('span', { class: 'sw custom' + (isCustom ? ' on' : ''), title: 'Any colour' }, inp));
   }
   return container;
 }
@@ -5051,9 +5100,11 @@ function closeDrawer() { if (document.body.classList.contains('no3d')) return; c
 function renderDrawerSoft() { if (LB.tab === 'journals') { renderJournalList(); renderSearch(); } else if (LB.tab !== 'settings') renderDrawer(); }
 function renderDrawer() {
   if (!state.lib) return;
+  const tabs = { journals: tabJournals, calendar: tabCalendar, insights: tabInsights, settings: tabSettings };
+  if (!tabs[LB.tab]) LB.tab = 'journals';   // the shelf and the pen cup ask for 'library', which is not a tab
   $$('.dtabs [data-dt]').forEach(b => b.setAttribute('aria-selected', b.dataset.dt === LB.tab ? 'true' : 'false'));
   const body = $('#drBody'); body.textContent = ''; body.scrollTop = 0;
-  ({ journals: tabJournals, calendar: tabCalendar, insights: tabInsights, settings: tabSettings })[LB.tab](body);
+  tabs[LB.tab](body);
 }
 function memories() {
   const t = new Date(), out = [];
@@ -5082,9 +5133,11 @@ function tabJournals(body) {
   if (tags.length) body.append(h('div', { class: 'tags' }, tags.map(([t, c]) => h('button', { type: 'button', class: 'chip', onclick: () => { q.value = t; LB.q = t; renderSearch(); } }, t + ' ', h('small', { text: String(c), style: 'opacity:.6' })))));
   body.append(h('div', { class: 'results', id: 'drResults' }), h('ul', { class: 'jl', id: 'drList' }));
   body.append(h('button', { type: 'button', class: 'btn accent', onclick: () => openDesigner(null) }, '+ Design a new journal'));
-  body.append(h('p', { class: 'note', text: state.store && state.store.kind === 'cloud' ? 'Saved to your account. Only you can read your journals, even if you share this page.' : 'Saved in this browser only. Open Daybook in Claude while signed in to keep journals on your account.' }));
+  body.append(h('p', { class: 'note', text: state.store && state.store.kind === 'cloud' ? 'Saved to your account. Only you can read your journals, even if you share this page.' : window.claude ? 'Saved in this browser only. Open Daybook in Claude while signed in to keep journals on your account.' : 'Saved in this browser on this device only. Clearing your browsing data erases it, so save a copy now and then (Settings).' }));
   renderJournalList(); renderSearch();
 }
+// the #tags on a page, each once and in lower case (#Travel and #travel are one tag); a tag starts with a letter, in any language
+function tagsIn(text) { return Array.from(new Set(((text || '').match(/#\p{L}[\p{L}\p{N}_-]*/gu) || []).map(t => t.toLowerCase()))); }
 function topTags(n) { const m = new Map(); for (const p of state.pages.values()) tagsIn(p.text).forEach(t => m.set(t, (m.get(t) || 0) + 1)); return Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, n); }
 function renderJournalList() {
   const list = $('#drList'); if (!list) return; list.textContent = ''; list.hidden = !!(LB.q || '').trim();
@@ -5277,7 +5330,9 @@ function buildLock() {
   });
 }
 function showWelcome(force) {
-  if (!force && S().welcomed) return;
+  // a visitor who has already opened something does not need it popping up over that
+  if (!force && (S().welcomed || RD.open || opening() || (R3 && (isOverlayActive() || R3.cam.mode !== 'room')))) return;
+  $('#welcome .note').textContent = state.store && state.store.kind === 'cloud' ? 'Only you can read your journals. They are saved to your account as you write.' : 'Your journals stay in this browser on this device, and save as you write.';
   $('#welcome').hidden = false;
 }
 function hideWelcome() { $('#welcome').hidden = true; if (!S().welcomed) { state.lib.settings.welcomed = true; saveLib(); } }

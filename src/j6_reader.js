@@ -60,11 +60,20 @@ function trackInsert(el, next, stagger) {
   el._prev = next;
   return inserted;
 }
+// where each visible character starts: an emoji is two code units (or several joined ones) and must never be split
+// across ink spans, or it shows as broken halves
+const graphemes = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter() : null;
+function charStarts(text) {
+  if (graphemes) return Array.from(graphemes.segment(text), s => s.index);
+  const s = []; for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); if (c < 0xDC00 || c > 0xDFFF) s.push(i); } return s;
+}
 function renderInk(el) {
   const ta = el._ta, ink = el._ink, text = ta.value, now = performance.now();
   el._fresh = el._fresh.filter(f => f.t > now - 700 && f.i < text.length);
   const caret = document.activeElement === ta ? ta.selectionEnd : -1;
-  const fm = new Map(el._fresh.map(f => [f.i, f.t]));
+  const starts = charStarts(text), end = new Map(starts.map((s, k) => [s, k + 1 < starts.length ? starts[k + 1] : text.length]));
+  const startOf = i => { let lo = 0, hi = starts.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (starts[m] <= i) lo = m; else hi = m - 1; } return starts[lo]; };
+  const fm = new Map(); for (const f of el._fresh) { const s = startOf(f.i); if (!fm.has(s) || f.t < fm.get(s)) fm.set(s, f.t); }
   const idxs = Array.from(new Set(Array.from(fm.keys()).concat(caret >= 0 ? [caret] : []))).sort((x, y) => x - y);
   const frag = document.createDocumentFragment(); let pos = 0, mark = null; const spans = [];
   for (const i of idxs) {
@@ -72,7 +81,7 @@ function renderInk(el) {
     if (i > pos) frag.append(text.slice(pos, i));
     pos = i;
     if (i === caret) { mark = document.createElement('span'); mark.textContent = '⁠'; frag.append(mark); }
-    if (fm.has(i)) { const s = document.createElement('span'); s.className = 'nw'; s.textContent = text[i]; const t = fm.get(i); s.style.animationDelay = Math.round(t - now) + 'ms'; s._t = t; frag.append(s); spans.push(s); pos = i + 1; }
+    if (fm.has(i)) { const s = document.createElement('span'); s.className = 'nw'; s.textContent = text.slice(i, end.get(i)); const t = fm.get(i); s.style.animationDelay = Math.round(t - now) + 'ms'; s._t = t; frag.append(s); spans.push(s); pos = end.get(i); }
   }
   if (pos < text.length) frag.append(text.slice(pos));
   frag.append('⁠');
@@ -184,7 +193,8 @@ function renderReader(soft) {
   updateCount();
   $('#rPrev').disabled = RD.n <= 1;
   const lastVisible = single ? RD.n : RD.n + 1;
-  $('#rNext').querySelector('span').textContent = lastVisible >= j.pages ? 'New page' : 'Next page';
+  const nextLabel = lastVisible >= j.pages ? 'New page' : 'Next page';   // the label also names the button when phones hide the text
+  $('#rNext').querySelector('span').textContent = nextLabel; $('#rNext').setAttribute('aria-label', nextLabel);
   updateGoal();
   if (!soft && RD.pop) renderPop();
   if (RD.drawing) renderDrawbar();
@@ -217,6 +227,7 @@ function showReader(id, n, pop) {
     clearTimeout(RD.flapT); RD.flapT = setTimeout(() => { flap.hidden = true; flap.className = 'flap'; book.classList.remove('opening'); }, 1100);
   }
   requestAnimationFrame(() => rd.classList.add('show'));
+  document.body.classList.add('reading');   // hides the room header, which Safari otherwise shows through the reader's scrim
   if (R3) setTimeout(() => { if (RD.open) R3.paused = true; }, 450);
   $('#tip').hidden = true;
   setSaveState(state.store && state.store.kind === 'cloud' ? 'Saved to your account' : 'Saved in this browser');
@@ -234,7 +245,7 @@ function closeReader() {
   const rd = $('#reader'), flap = $('#flap');
   const finish = () => {
     RD.closing = false;
-    if (!RD.open) rd.classList.remove('show');
+    if (!RD.open) { rd.classList.remove('show'); document.body.classList.remove('reading'); }
     setTimeout(() => { if (!RD.open) { rd.hidden = true; flap.hidden = true; flap.className = 'flap'; $('#book').classList.remove('opening'); } }, 400);
     if (R3) {
       R3.paused = false;

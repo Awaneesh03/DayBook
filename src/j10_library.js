@@ -7,9 +7,11 @@ function closeDrawer() { if (document.body.classList.contains('no3d')) return; c
 function renderDrawerSoft() { if (LB.tab === 'journals') { renderJournalList(); renderSearch(); } else if (LB.tab !== 'settings') renderDrawer(); }
 function renderDrawer() {
   if (!state.lib) return;
+  const tabs = { journals: tabJournals, calendar: tabCalendar, insights: tabInsights, settings: tabSettings };
+  if (!tabs[LB.tab]) LB.tab = 'journals';   // the shelf and the pen cup ask for 'library', which is not a tab
   $$('.dtabs [data-dt]').forEach(b => b.setAttribute('aria-selected', b.dataset.dt === LB.tab ? 'true' : 'false'));
   const body = $('#drBody'); body.textContent = ''; body.scrollTop = 0;
-  ({ journals: tabJournals, calendar: tabCalendar, insights: tabInsights, settings: tabSettings })[LB.tab](body);
+  tabs[LB.tab](body);
 }
 function memories() {
   const t = new Date(), out = [];
@@ -38,9 +40,11 @@ function tabJournals(body) {
   if (tags.length) body.append(h('div', { class: 'tags' }, tags.map(([t, c]) => h('button', { type: 'button', class: 'chip', onclick: () => { q.value = t; LB.q = t; renderSearch(); } }, t + ' ', h('small', { text: String(c), style: 'opacity:.6' })))));
   body.append(h('div', { class: 'results', id: 'drResults' }), h('ul', { class: 'jl', id: 'drList' }));
   body.append(h('button', { type: 'button', class: 'btn accent', onclick: () => openDesigner(null) }, '+ Design a new journal'));
-  body.append(h('p', { class: 'note', text: state.store && state.store.kind === 'cloud' ? 'Saved to your account. Only you can read your journals, even if you share this page.' : 'Saved in this browser only. Open Daybook in Claude while signed in to keep journals on your account.' }));
+  body.append(h('p', { class: 'note', text: state.store && state.store.kind === 'cloud' ? 'Saved to your account. Only you can read your journals, even if you share this page.' : window.claude ? 'Saved in this browser only. Open Daybook in Claude while signed in to keep journals on your account.' : 'Saved in this browser on this device only. Clearing your browsing data erases it, so save a copy now and then (Settings).' }));
   renderJournalList(); renderSearch();
 }
+// the #tags on a page, each once and in lower case (#Travel and #travel are one tag); a tag starts with a letter, in any language
+function tagsIn(text) { return Array.from(new Set(((text || '').match(/#\p{L}[\p{L}\p{N}_-]*/gu) || []).map(t => t.toLowerCase()))); }
 function topTags(n) { const m = new Map(); for (const p of state.pages.values()) tagsIn(p.text).forEach(t => m.set(t, (m.get(t) || 0) + 1)); return Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, n); }
 function renderJournalList() {
   const list = $('#drList'); if (!list) return; list.textContent = ''; list.hidden = !!(LB.q || '').trim();
@@ -233,7 +237,9 @@ function buildLock() {
   });
 }
 function showWelcome(force) {
-  if (!force && S().welcomed) return;
+  // a visitor who has already opened something does not need it popping up over that
+  if (!force && (S().welcomed || RD.open || opening() || (R3 && (isOverlayActive() || R3.cam.mode !== 'room')))) return;
+  $('#welcome .note').textContent = state.store && state.store.kind === 'cloud' ? 'Only you can read your journals. They are saved to your account as you write.' : 'Your journals stay in this browser on this device, and save as you write.';
   $('#welcome').hidden = false;
 }
 function hideWelcome() { $('#welcome').hidden = true; if (!S().welcomed) { state.lib.settings.welcomed = true; saveLib(); } }

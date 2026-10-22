@@ -295,6 +295,8 @@ const plain = http.createServer((q, r) => { r.writeHead(200, { 'Content-Type': '
 await new Promise(r => plain.listen(0, '127.0.0.1', r));
 await test('text, and the symbols the app saves, stay intact when a server names no charset', async page => {
   ok(await page.evaluate(() => document.characterSet) === 'UTF-8', 'page not read as UTF-8: ' + await page.evaluate(() => document.characterSet));
+  // without a doctype the page ran in quirks mode, without a viewport tag phones zoomed out to 980 px, and the missing icon logged a 404
+  ok(await page.evaluate(() => document.compatMode === 'CSS1Compat' && !!document.querySelector('meta[name=viewport]') && !!document.querySelector('link[rel=icon]')), 'the page needs a doctype, a viewport tag and an icon');
   await page.click('#bToday');
   await page.waitForFunction(() => { const r = document.querySelector('#reader'); return !r.hidden && r.classList.contains('show') && Daybook.R3.paused; }, null, { timeout: 30000 });
   const ui = await page.evaluate(() => { const pg = document.querySelector('.page'); return { count: document.querySelector('#rCount').textContent, num: pg.querySelector('.p-num').textContent, hint: pg._ta.placeholder, ink: pg._ink.textContent, loader: document.querySelector('#loader p').textContent }; });
@@ -309,6 +311,90 @@ await test('text, and the symbols the app saves, stay intact when a server names
   ok(saved.text.includes('To do\n☐ \n☐ \n') && saved.items.some(i => (i.s || i.e || i.t) === '🌙'), 'saved garbled: ' + JSON.stringify({ text: saved.text, items: saved.items }));
 }, { url: `http://127.0.0.1:${plain.address().port}/` });
 plain.close();
+
+/* ---- found in the launch QA pass ---- */
+const readerOpen = page => page.waitForFunction(() => { const r = document.querySelector('#reader'); return !r.hidden && r.classList.contains('show') && Daybook.R3.paused; }, null, { timeout: 30000 });
+const readerClosed = page => page.waitForFunction(() => document.querySelector('#reader').hidden && !Daybook.R3.paused, null, { timeout: 30000 });
+async function write(page, journal, words) {
+  await page.evaluate(i => Daybook.openJournal(Daybook.state.lib.journals[i].id), journal); await readerOpen(page);
+  await page.locator('#reader textarea:visible').first().focus(); await page.keyboard.type(words);
+  await page.evaluate(() => Daybook.closeReader()); await readerClosed(page);
+}
+// topTags() called a tagsIn() that did not exist, so the library threw as soon as a page held text; the shelf asked the drawer
+// for a 'library' tab, which does not exist either. Any page error fails this test.
+await test('the library opens after writing, gathers #tags, and the shelf opens it too', async page => {
+  await write(page, 0, 'Packed for #Travel, then #travel again and a #café stop on page #1.');
+  await page.evaluate(() => window.handleRoomObjectAction({ type: 'shelf' }));
+  await page.waitForFunction(() => document.querySelector('#drawer').classList.contains('open'), null, { timeout: 8000 });
+  const tags = await page.evaluate(() => [...document.querySelectorAll('#drBody .tags .chip')].map(c => c.firstChild.textContent.trim()).sort());
+  ok(JSON.stringify(tags) === JSON.stringify(['#café', '#travel']), 'tags: ' + JSON.stringify(tags));
+  await page.evaluate(() => [...document.querySelectorAll('#drawer [role=tab]')].find(x => /insights/i.test(x.textContent)).click());
+  ok(await page.evaluate(() => /Your tags/.test(document.querySelector('#drBody').textContent)), 'Insights should list the tags');
+});
+// localStore wrote its startup copy back whole, so whichever tab saved last erased what the other tab had added
+await test('two open tabs never erase each other\'s journals or pages', async (page, t) => {
+  const other = await t.ctx.newPage(); other.on('pageerror', e => t.errors.push(String(e)));
+  await other.goto(page.url(), { waitUntil: 'domcontentloaded' }); await waitReady(other);
+  await page.evaluate(() => document.querySelector('#bNew').click());
+  await page.locator('#sPane input').first().fill('Made in the first tab');
+  await page.click('#dSave');
+  await other.waitForFunction(() => Daybook.state.lib.journals.some(j => j.title === 'Made in the first tab'), null, { timeout: 10000 });   // arrives live
+  await write(page, 0, 'Written in the first tab.');
+  await write(other, 2, 'Written in the second tab.');
+  await other.evaluate(() => document.querySelector('#bLamp').click());   // a settings save from the second tab
+  await other.waitForFunction(() => JSON.parse(localStorage.getItem('daybook3d:v1')).lib.settings.lamp === false, null, { timeout: 8000 });
+  await reload(page);
+  const s = await page.evaluate(() => ({ titles: Daybook.state.lib.journals.map(j => j.title), texts: [...Daybook.state.pages.values()].map(p => p.text || '') }));
+  ok(s.titles.includes('Made in the first tab'), 'journal lost: ' + s.titles);
+  ok(s.texts.some(x => x.includes('Written in the first tab.')) && s.texts.some(x => x.includes('Written in the second tab.')), 'a page was lost: ' + JSON.stringify(s.texts));
+});
+// a full storage used to be swallowed: the page said "Saved" while nothing was stored, and the words were gone after a reload
+await test('a full browser storage says so instead of "Saved", and saves again once there is room', async page => {
+  await page.evaluate(i => Daybook.openJournal(Daybook.state.lib.journals[i].id), 0); await readerOpen(page);
+  await page.evaluate(() => { const fill = (key, size) => { const v = 'x'.repeat(size); for (let i = 0; i < 4000; i++) { try { localStorage.setItem(key + i, v); } catch (e) { return; } } }; fill('filler', 64 * 1024); fill('tail', 1024); fill('crumb', 16); });
+  await page.locator('#reader textarea:visible').first().focus(); await page.keyboard.type('No room for these words.');
+  await page.waitForFunction(() => document.querySelector('#rStatus').textContent === 'Not saved yet', null, { timeout: 10000 });
+  const msg = await page.evaluate(() => [...document.querySelectorAll('.toast, #toast')].map(x => x.textContent).join(' '));
+  ok(/no room left/.test(msg), 'expected a plain storage-full message, got: ' + msg);
+  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (/^(filler|tail|crumb)/.test(k)) localStorage.removeItem(k); });
+  await page.keyboard.type(' Room again.');
+  await page.waitForFunction(() => document.querySelector('#rStatus').textContent === 'Saved', null, { timeout: 10000 });
+  await reload(page);
+  ok(await page.evaluate(() => [...Daybook.state.pages.values()].some(p => (p.text || '').includes('No room for these words. Room again.'))), 'the words were not kept');
+});
+// outside Claude there is no downloads API, and "Save a copy" only said it was not available
+await test('saving a copy downloads a Markdown file when not inside Claude', async page => {
+  await write(page, 0, 'Keep a copy of this.');
+  await page.evaluate(i => Daybook.openJournal(Daybook.state.lib.journals[i].id), 0); await readerOpen(page);
+  await page.click('[data-pop="more"]');
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 10000 }), page.evaluate(() => [...document.querySelectorAll('#pop .btn')].find(x => /Save a copy/.test(x.textContent)).click())]);
+  const text = fs.readFileSync(await dl.path(), 'utf8');
+  ok(/\.md$/.test(dl.suggestedFilename()) && text.includes('Keep a copy of this.'), 'download: ' + dl.suggestedFilename() + ' ' + text.slice(0, 80));
+});
+// the welcome opened 1.4 s after loading even over a journal the visitor had already opened, and blocked it
+await test('the welcome does not cover a journal opened straight away', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  try {
+    const p = await ctx.newPage();
+    await p.goto(pathToFileURL(html).href, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone'), null, { timeout: 60000 });
+    await p.evaluate(() => document.querySelector('#bToday').click());
+    await p.waitForTimeout(4000);   // well past the welcome's 1.4 s timer: this checks that something does not happen
+    ok(await p.evaluate(() => document.querySelector('#welcome').hidden), 'the welcome covered the open journal');
+    ok(await p.evaluate(() => !Daybook.S().welcomed), 'the welcome should still show on a later visit');
+  } finally { await ctx.close(); }
+});
+// the customizer's setting rows had no styles (the title ran into its description), its sixth tab was cut off,
+// the mood dots were 17 px targets, and on phones the page buttons had no name
+await test('customizer rows and tabs are laid out, and reader controls are named and big enough to tap', async page => {
+  await page.evaluate(() => Daybook.openRoomCustom('lighting'));
+  const c = await page.evaluate(() => { const tabs = document.querySelector('#rcTabs'), last = [...tabs.querySelectorAll('button')].pop().getBoundingClientRect(), box = tabs.getBoundingClientRect(); const info = document.querySelector('#rcBody .rc-field-info'); return { lastTabShown: last.right <= box.right + 1 && last.bottom <= box.bottom + 1, column: getComputedStyle(info).flexDirection, titleWeight: +getComputedStyle(info.querySelector('.rc-field-title')).fontWeight }; });
+  ok(c.lastTabShown && c.column === 'column' && c.titleWeight >= 600, 'customizer layout: ' + JSON.stringify(c));
+  await page.evaluate(() => Daybook.closeRoomCustom());
+  await page.evaluate(i => Daybook.openJournal(Daybook.state.lib.journals[i].id), 0); await readerOpen(page);
+  const r = await page.evaluate(() => { const m = document.querySelector('#reader .page .p-mood button').getBoundingClientRect(); return { mood: [m.width, m.height], prev: document.querySelector('#rPrev').getAttribute('aria-label'), next: document.querySelector('#rNext').getAttribute('aria-label') }; });
+  ok(r.mood[0] >= 24 && r.mood[1] >= 24 && r.prev && r.next, 'reader controls: ' + JSON.stringify(r));
+});
 
 await browser.close();
 console.log(failed ? `\n${failed} test(s) failed` : '\nall passed');

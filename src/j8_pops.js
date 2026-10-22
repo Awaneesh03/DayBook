@@ -120,7 +120,11 @@ function journalMarkdown(j) {
   return { out, count: pages.length };
 }
 async function saveFile(name, data) {
-  if (!downloadsApi) { toast('Saving files is not available in this view.'); return; }
+  if (!downloadsApi) {   // outside Claude: an ordinary browser download
+    const a = h('a', { href: URL.createObjectURL(new Blob([data], { type: 'text/markdown;charset=utf-8' })), download: name, hidden: true });
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast('Saved a copy to your downloads.'); return;
+  }
   try { await downloadsApi.save({ filename: name, data }); toast('Copy saved.'); }
   catch (e) { if (!e || e.code !== 'declined') toast('Could not save a copy from here.'); }
 }

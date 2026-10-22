@@ -64,22 +64,25 @@ const S = () => (state.lib ? state.lib.settings : SETTINGS_DEFAULT);
 
 function localStore() {
   const KEY = 'daybook3d:v1', MK = 'daybook3d:m:';
-  let mem = { lib: null, pages: {} };
-  try { const raw = window.localStorage.getItem(KEY); if (raw) mem = JSON.parse(raw) || mem; } catch (e) { /* private mode */ }
-  if (!mem.pages) mem.pages = {};
+  // what is stored right now: another tab may have saved since this one loaded
+  const read = () => { let m = null; try { m = JSON.parse(window.localStorage.getItem(KEY) || 'null'); } catch (e) { /* private mode or unreadable */ } m = m && typeof m === 'object' ? m : { lib: null, pages: {} }; if (!m.pages) m.pages = {}; return m; };
+  // a write that did not happen has to reach the save queue ("Not saved yet"), never look saved
+  const fail = (e, what) => { const err = new Error(/quota/i.test((e && e.name) + ' ' + (e && e.message)) ? 'Your browser has no room left to save ' + what + '. Save a copy of your journals (Library, Settings), then remove some photos to make space.' : 'Your browser is not letting Daybook save ' + what + '. Check that this site is allowed to store data.'); err.friendly = true; return err; };
+  // change only this part of what is stored, so journals and pages saved by another tab are kept
+  const persist = change => { const m = read(); change(m); try { window.localStorage.setItem(KEY, JSON.stringify(m)); } catch (e) { throw fail(e, 'your changes'); } };
   const media = {};
-  const persist = () => { try { window.localStorage.setItem(KEY, JSON.stringify(mem)); } catch (e) { /* storage full: keep in memory */ } };
   return {
     kind: 'local',
     async init() {
-      let legacy = [];
+      const mem = read(); let legacy = [];
       if (!mem.lib) { try { const old = JSON.parse(window.localStorage.getItem('daybook:v1') || '{}') || {}; legacy = Object.keys(old).map(k => old[k]); } catch (e) { legacy = []; } }
       return { lib: mem.lib, pages: Object.assign({}, mem.pages), legacy };
     },
-    subscribe() {},
-    async writeLib(lib) { mem.lib = clone(lib); persist(); },
-    async writePage(k, d) { if (d) mem.pages[k] = clone(d); else delete mem.pages[k]; persist(); },
-    async writeMedia(id, d) { media[id] = d; try { window.localStorage.setItem(MK + id, JSON.stringify(d)); } catch (e) { /* kept for this visit */ } },
+    // another tab saved: hand its journals and pages to the same merge the cloud store uses (unsaved edits here win)
+    subscribe(onLib, onPages) { window.addEventListener('storage', e => { if (e.key !== KEY || !e.newValue) return; const m = read(); if (m.lib) onLib(m.lib); onPages(m.pages); }); },
+    async writeLib(lib) { persist(m => { m.lib = clone(lib); }); },
+    async writePage(k, d) { persist(m => { if (d) m.pages[k] = clone(d); else delete m.pages[k]; }); },
+    async writeMedia(id, d) { try { window.localStorage.setItem(MK + id, JSON.stringify(d)); } catch (e) { throw fail(e, 'this photo'); } media[id] = d; },
     async readMedia(id) { if (media[id]) return media[id]; try { return JSON.parse(window.localStorage.getItem(MK + id) || 'null'); } catch (e) { return null; } },
     async deleteMedia(id) { delete media[id]; try { window.localStorage.removeItem(MK + id); } catch (e) { /* ignore */ } }
   };
@@ -130,9 +133,9 @@ function importLegacy(lib, pages, legacy) {
 let libTimer = null, libInflight = 0, chain = Promise.resolve(), saveErrShown = false;
 function setSaveState(t) { const el = $('#rStatus'); if (el) el.textContent = t; }
 function queue(fn) {
-  chain = chain.then(fn).catch(() => {
+  chain = chain.then(fn).catch(e => {
     setSaveState('Not saved yet');
-    if (!saveErrShown) { saveErrShown = true; toast('Could not save just now. Your words stay on screen and will save on the next change.'); setTimeout(() => { saveErrShown = false; }, 15000); }
+    if (!saveErrShown) { saveErrShown = true; toast(e && e.friendly ? e.message : 'Could not save just now. Your words stay on screen and will save on the next change.'); setTimeout(() => { saveErrShown = false; }, 15000); }
   });
   return chain;
 }

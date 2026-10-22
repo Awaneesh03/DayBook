@@ -57,6 +57,7 @@
   opacity: 0; transition: opacity .4s;
 }
 .reader.show { opacity: 1; }
+body.reading .hud { visibility: hidden; }
 .r-top { display: flex; align-items: center; gap: 10px; padding-block: 12px; min-width: 0; flex-wrap: wrap; }
 .r-title { flex: 1 1 160px; min-width: 0; color: var(--on-scrim); }
 .r-title b { display: block; font: 600 24px/1.1 var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -126,11 +127,15 @@
 .p-date.dim { opacity: .5; }
 .p-date input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .p-date input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: auto; height: auto; margin: 0; padding: 0; cursor: pointer; }
-.p-mood { display: flex; align-items: center; gap: 5px; flex: none; }
-.p-mood button { width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--ink-c); background: transparent; padding: 0; opacity: .45; transition: transform .25s var(--spring), opacity .2s; }
-.p-mood button[aria-pressed="true"] { background: var(--ink-c); opacity: 1; transform: scale(1.18); }
+.p-mood { display: flex; align-items: center; gap: 0; flex: none; }
+/* a 24px target (easy to tap) around the same 17px ring */
+.p-mood button { position: relative; width: 24px; height: 24px; border-radius: 50%; border: 0; background: transparent; padding: 0; opacity: .45; transition: transform .25s var(--spring), opacity .2s; }
+.p-mood button::before { content: ""; position: absolute; inset: 3.5px; border-radius: 50%; border: 1.5px solid var(--ink-c); }
+.p-mood button[aria-pressed="true"] { opacity: 1; transform: scale(1.18); }
+.p-mood button[aria-pressed="true"]::before { background: var(--ink-c); }
 .p-mood button:hover { opacity: .9; transform: scale(1.12); }
 .p-mood-t { font-family: var(--pen-font); font-size: calc(var(--pen-size) * .7); min-width: 2.6em; text-align: right; opacity: .8; }
+@media (max-width: 380px) { .p-mood-t { display: none; } }   /* the filled dot shows the mood; the date needs the room */
 .p-write { position: relative; z-index: 2; flex: 1 1 auto; min-height: 0; }
 .p-body, .p-ink {
   position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; border: 0; padding: 0 2px;

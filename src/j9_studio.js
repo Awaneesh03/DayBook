@@ -20,7 +20,7 @@ function swRow(container, colors, current, onPick, custom) {
     const inp = h('input', { type: 'color', value: current && current[0] === '#' && current.length === 7 ? current : '#888888', 'aria-label': 'Pick any colour' });
     inp.addEventListener('input', () => onPick(inp.value, true)); inp.addEventListener('change', () => onPick(inp.value, false));
     const isCustom = !colors.some(c => String(c).toLowerCase() === String(current || '').toLowerCase());
-    container.append(h('span', { class: 'sw custom', title: 'Any colour', 'aria-pressed': isCustom ? 'true' : 'false' }, inp));
+    container.append(h('span', { class: 'sw custom' + (isCustom ? ' on' : ''), title: 'Any colour' }, inp));
   }
   return container;
 }

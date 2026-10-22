@@ -82,7 +82,7 @@
     <button type="button" role="tab" data-dt="insights" aria-selected="false">Insights</button>
     <button type="button" role="tab" data-dt="settings" aria-selected="false">Settings</button>
   </div>
-  <div class="dr-body" id="drBody"></div>
+  <div class="dr-body" id="drBody" tabindex="0"></div>
 </aside>
 
 <!-- Reader -->
@@ -109,9 +109,9 @@
     </div>
   </div>
   <div class="r-bottom" id="rBottom">
-    <button type="button" class="hb" id="rPrev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>Previous</span></button>
+    <button type="button" class="hb" id="rPrev" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>Previous</span></button>
     <div class="goal" id="goal" title="Words written today"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="g-bg" cx="18" cy="18" r="15"/><circle class="g-fg" id="goalArc" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="0 100"/></svg><span><b id="goalTxt"></b><i id="rStatus" style="font-style:normal"></i></span></div>
-    <button type="button" class="hb" id="rNext"><span>Next page</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button type="button" class="hb" id="rNext" aria-label="Next page"><span>Next page</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
   </div>
   <div class="drawbar" id="drawbar" hidden></div>
   <section class="pop" id="pop" hidden aria-live="polite"></section>

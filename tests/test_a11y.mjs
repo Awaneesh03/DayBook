@@ -23,6 +23,8 @@ async function fresh(ctxOpts = {}) {
   ctx.setDefaultNavigationTimeout(90000);   // the page waits for three.js from the CDN; slow machines need longer
   await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('daybook3d:v1', JSON.stringify(s)); sessionStorage.setItem('seeded', '1'); } }, seed);
   const page = await ctx.newPage(); const errors = [];
+  // CPU_THROTTLE=n slows the page's CPU n times, to reproduce slow machines such as CI runners
+  if (process.env.CPU_THROTTLE) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: +process.env.CPU_THROTTLE });
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(target, { waitUntil: 'domcontentloaded' });
@@ -83,7 +85,7 @@ await test('journaling works with the keyboard alone: write, plan a task, tick i
   await page.keyboard.type('Written without a mouse.');
   await page.keyboard.press('Control+k'); await page.keyboard.type('today: habits'); await page.keyboard.press('Enter');
   await page.waitForSelector('#plTaskIn');
-  await page.waitForFunction(() => document.activeElement.closest('#drawer'), null, { timeout: 20000 });
+  await page.waitForFunction(() => document.activeElement.closest('#drawer'), null, { timeout: 20000 }).catch(async () => { throw new Error('focus did not move into the library, it is on ' + await page.evaluate(() => document.activeElement.outerHTML.slice(0, 80) + ' (drawer hidden=' + document.querySelector('#drawer').hidden + ', reader hidden=' + document.querySelector('#reader').hidden + ')')); });
   tabs = 0; while ((await active(page)).id !== 'plTaskIn' && tabs < 40) { await page.keyboard.press('Tab'); tabs++; }
   ok((await active(page)).id === 'plTaskIn', 'Tab never reached the task field');
   await page.keyboard.type('Reply to Sam'); await page.keyboard.press('Enter');
@@ -92,7 +94,7 @@ await test('journaling works with the keyboard alone: write, plan a task, tick i
   await page.keyboard.press('Space');
   await page.waitForFunction(() => Daybook.state.lib.tasks[0] && Daybook.state.lib.tasks[0].done, null, { timeout: 20000 }).catch(() => { throw new Error('Space did not tick the task'); });
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.querySelector('#drawer').hidden, null, { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelector('#drawer').hidden, null, { timeout: 20000 }).catch(() => { throw new Error('Escape did not close the library'); });
   ok(await page.evaluate(() => [...Daybook.state.pages.values()].some(p => /Written without a mouse\./.test(p.text))), 'the writing was not kept');
 });
 

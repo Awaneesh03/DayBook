@@ -33,6 +33,8 @@ const roomBack = () => page.waitForFunction(() => document.querySelector('#reade
 const saved = () => page.waitForFunction(() => !Daybook.unsaved() && document.querySelector('#rStatus').textContent !== 'Saving…', null, { timeout: 15000 });
 const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('daybook3d:v1')));
 const leftText = '#spread .page[data-side="L"] textarea';
+// near the start of the text: a sticker can sit over the middle of the page, and a click there picks the sticker
+const clickPage = () => page.click(leftText, { position: { x: 40, y: 24 } });
 let failed = false;
 
 try {
@@ -49,7 +51,7 @@ try {
 
   at('open a journal and write');
   await page.click('#bToday'); await readerUp();
-  await page.click(leftText); await page.keyboard.type('Journey day: café, rain and a long walk. #journey');
+  await clickPage(); await page.keyboard.type('Journey day: café, rain and a long walk. #journey');
   at('change pen, ink and paper, set a mood, bookmark the page, add a sticker');
   await page.click('#reader [data-pop="pen"]'); await page.click('#pop .pen-card:nth-child(4)');
   await page.click('#reader [data-pop="paper"]'); await page.click('#pop .paper-t:nth-child(2)');
@@ -66,7 +68,7 @@ try {
 
   at('turn pages, write on page 3, close and reopen');
   await page.click('#rNext'); await page.waitForFunction(() => [...document.querySelectorAll('#spread .page')].some(p => p.dataset.n === '3'), null, { timeout: 15000 });
-  await page.click(leftText); await page.keyboard.type('Page three, after the turn.');
+  await clickPage(); await page.keyboard.type('Page three, after the turn.');
   await saved();
   await page.click('#rClose'); await roomBack();
   await page.click('#bShelf'); await page.click('#drList .jl-item'); await readerUp();
@@ -117,7 +119,7 @@ try {
   await page.evaluate(j => { const p = Daybook.state.pages.get(j + '~1'); p.text = 'Changed after the backup.'; }, j0);
   await page.evaluate(() => Daybook.closeDrawer()); await page.waitForTimeout(500);
   await page.evaluate(() => Daybook.openJournal(Daybook.state.lib.activeId, 1)); await readerUp();
-  await page.click(leftText); await page.keyboard.press('End'); await page.keyboard.type(' More.'); await saved();
+  await clickPage(); await page.keyboard.press('End'); await page.keyboard.type(' More.'); await saved();
   await page.click('#rClose'); await roomBack();
   const choose = async () => {
     await page.evaluate(() => Daybook.openDrawer('settings'));

@@ -376,9 +376,20 @@ await test('the welcome does not cover a journal opened straight away', async ()
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   try {
     const p = await ctx.newPage();
+    // Click Write today the moment the loader goes, from inside the page. (Waiting for that from the test polls once per
+    // frame, and software WebGL frames at boot can take seconds: the click then came after the welcome had rightly
+    // appeared over an empty room, which made this test fail now and then without anything being wrong.)
+    await ctx.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+      const mo = new MutationObserver(() => {
+        if (!document.querySelector('#loader.gone')) return;
+        mo.disconnect(); window.__welcomeAtClick = !document.querySelector('#welcome').hidden;
+        document.querySelector('#bToday').click();
+      });
+      mo.observe(document.querySelector('#loader'), { attributes: true });
+    }));
     await p.goto(pathToFileURL(html).href, { waitUntil: 'domcontentloaded' });
-    await p.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone'), null, { timeout: 60000 });
-    await p.evaluate(() => document.querySelector('#bToday').click());
+    await p.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone') && window.__welcomeAtClick !== undefined, null, { timeout: 60000 });
+    ok(await p.evaluate(() => window.__welcomeAtClick === false), 'test setup: the welcome was already showing when Write today was clicked');
     await p.waitForTimeout(4000);   // well past the welcome's 1.4 s timer: this checks that something does not happen
     ok(await p.evaluate(() => document.querySelector('#welcome').hidden), 'the welcome covered the open journal');
     ok(await p.evaluate(() => !Daybook.S().welcomed), 'the welcome should still show on a later visit');

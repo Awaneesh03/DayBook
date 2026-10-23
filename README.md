@@ -81,7 +81,8 @@ python3 -m http.server 8000   # serve the folder
 ```
 
 Open <http://localhost:8000> and press <kbd>Ctrl+C</kbd> in the terminal to stop the server. Opening `index.html`
-directly from disk works too.
+directly from disk works too, but serve it if you can: some browsers (Chrome on Linux, for one) do not reliably keep
+unsaved writing across a reload for pages opened from disk.
 
 **If something looks wrong:** a missing 3D room and plain fonts usually mean the CDNs could not be reached. Daybook then
 opens in a 2D mode where the library and journals still work. If port 8000 is busy, use another one
@@ -94,12 +95,15 @@ The tests drive Google Chrome with [Playwright](https://playwright.dev/) and ren
 ```sh
 npm ci                              # installs playwright-core (tests only)
 python3 build.py                    # always test a fresh build
-npm test                            # every suite, with a summary at the end
+npm test                            # every suite against a served copy, with a summary at the end
 node tests/test_planner.mjs         # one suite
 ONLY="search" node tests/test_planner.mjs   # tests whose name contains "search"
 ```
 
-Set `CHROME=/path/to/chrome` if Chrome is not at the macOS default location. The suites are:
+A single suite opens `index.html` from disk unless you give it the address of a served copy, for example
+`node tests/test_saving.mjs http://localhost:8000/index.html`. On Linux, use a served copy: Chromium there does not always keep
+`sessionStorage` across a reload for pages opened from disk. Set `CHROME=/path/to/chrome` if Chrome is not at the macOS
+default location. The suites are:
 
 | Suite | What it covers |
 |---|---|
@@ -111,6 +115,7 @@ Set `CHROME=/path/to/chrome` if Chrome is not at the macOS default location. The
 | `test_saving` | The save status, Ctrl+S, failed saves, unsaved writing recovered after a reload, conflicts, the PIN |
 | `test_planner` | Search, quick navigation, focus writing, habits and streaks, tasks, daily and weekly reviews |
 | `test_a11y` | Control names, dialog focus, keyboard-only journaling, visible focus, tap target sizes, Escape |
+| `test_journey` | One whole visit: write and style a page, reopen and reload, search, focus writing, a habit, a task and a review, a phone-sized window, then export, cancel and restore a backup |
 
 CI runs the build check and every suite on each push (see `.github/workflows/ci.yml`).
 
@@ -155,6 +160,8 @@ index.html                          the whole app, one static file
   the main and new features at desktop and phone sizes, not the full suites. Firefox and real phones have not been tested.
 - The Claude storage path is tested against an in-page stand-in, not the real service. Writes from another device at the
   moment of a restore are not guarded.
+- Unsaved writing is kept for a reload in `sessionStorage`, so it survives reloading that tab, not closing it. Chrome on
+  Linux does not reliably keep it for a page opened from disk; served pages (a local server or a website) keep it.
 - Daily and weekly reviews count as written pages, like pages started from a template, so they add to word counts and streaks.
 - On portrait phones the room shows only its middle, and at 460 px or narrower some header buttons move into the Library.
 - While the cover swings open or closed, its edge briefly overlaps the reader's top bar.

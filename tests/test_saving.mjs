@@ -7,7 +7,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const html = path.resolve(process.argv[2] || path.join(here, '..', 'index.html'));
+// a build to test: a path (opened from disk), or an http(s) URL of a served copy (npm test serves one: browsers keep
+// sessionStorage across a reload there, which Chromium on Linux does not always do for pages opened from disk)
+const arg = process.argv[2] || '', served = /^https?:\/\//.test(arg);
+const html = served ? path.join(here, '..', 'index.html') : path.resolve(arg || path.join(here, '..', 'index.html'));
+const target = served ? arg : pathToFileURL(html).href;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 
@@ -23,15 +27,18 @@ async function waitReady(page) {
 // seed: localStorage before the first load only; draft: a sessionStorage draft left by an earlier load of this tab
 async function fresh({ seed = { lib, pages }, draft = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  ctx.setDefaultNavigationTimeout(90000);   // the page waits for three.js from the CDN; slow machines need longer
   await ctx.addInitScript(([s, d]) => {
     if (sessionStorage.getItem('seeded')) return;
     localStorage.setItem('daybook3d:v1', JSON.stringify(s)); if (d) sessionStorage.setItem('daybook3d:draft:' + d.key, JSON.stringify(d.value));
     sessionStorage.setItem('seeded', '1');
   }, [seed, draft]);
   const page = await ctx.newPage(); const errors = [];
+  // CPU_THROTTLE=n slows the page's CPU n times, to reproduce slow machines such as CI runners
+  if (process.env.CPU_THROTTLE) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: +process.env.CPU_THROTTLE });
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(pathToFileURL(html).href, { waitUntil: 'domcontentloaded' }); await waitReady(page);
+  await page.goto(target, { waitUntil: 'domcontentloaded' }); await waitReady(page);
   return { ctx, page, errors };
 }
 async function test(name, fn, opts) {
@@ -51,6 +58,7 @@ const stored = page => page.evaluate(() => JSON.parse(localStorage.getItem('dayb
 const drafts = page => page.evaluate(() => Object.keys(sessionStorage).filter(k => k.startsWith('daybook3d:draft:')));
 const toastSays = (page, re) => page.waitForFunction(r => new RegExp(r).test(document.querySelector('#toast').textContent), re.source, { timeout: 15000 });
 const reload = async page => { await page.reload({ waitUntil: 'domcontentloaded' }); await waitReady(page); };
+const recoverShown = page => page.waitForSelector('#recover', { timeout: 15000 }).catch(async () => { throw new Error('no recovery dialog; the tab held ' + JSON.stringify(await page.evaluate(() => ({ drafts: Object.keys(sessionStorage).filter(k => k.startsWith('daybook3d:draft:')).map(k => sessionStorage.getItem(k)), stored: (JSON.parse(localStorage.getItem('daybook3d:v1')).pages['daily~1'] || {}).text, open: (Daybook.state.pages.get('daily~1') || {}).text })))); });
 
 await test('a failed save says Not saved yet, stays so while another page saves, and Ctrl+S never claims Saved', async page => {
   await open(page);
@@ -80,7 +88,7 @@ await test('writing that could not be saved survives a reload and is restored on
   await page.waitForFunction(() => document.querySelector('#rStatus').textContent === 'Not saved yet', null, { timeout: 15000 });
   await page.waitForFunction(() => Object.keys(sessionStorage).some(k => k === 'daybook3d:draft:daily~1'), null, { timeout: 5000 });
   await reload(page);
-  await page.waitForSelector('#recover', { timeout: 15000 });
+  await recoverShown(page);
   const shown = await page.evaluate(() => document.querySelector('#recover').textContent);
   ok(/Daily Journal · page 1/.test(shown) && shown.includes('FAILME kept café ✨') && /Saved now: “Saved first page\.”/.test(shown), 'recovery dialog: ' + shown);
   ok(!/saved again after this writing/.test(shown), 'not a conflict: the stored page is the one the writing started from');
@@ -98,12 +106,12 @@ await test('keeping the saved page discards the draft deliberately, and Decide l
   await typeOn(page, 'L', ' FAILME unwanted');
   await page.waitForFunction(() => Object.keys(sessionStorage).some(k => k === 'daybook3d:draft:daily~1'), null, { timeout: 15000 });
   await reload(page);
-  await page.waitForSelector('#recover', { timeout: 15000 });
+  await recoverShown(page);
   await page.keyboard.press('Escape');   // decide later
   ok(!(await page.$('#recover')) && (await drafts(page)).length === 1, 'Decide later must keep the draft');
   ok(await page.evaluate(() => document.querySelector('#drawer').hidden && Daybook.R3.cam.mode === 'room'), 'Escape on the dialog must not do anything else');
   await reload(page);
-  await page.waitForSelector('#recover', { timeout: 15000 });
+  await recoverShown(page);
   await page.click('#recover .rc-item .btn:not(.solid)');
   ok(!(await drafts(page)).length, 'Keep the saved page must remove the draft');
   ok(await page.evaluate(() => Daybook.state.pages.get('daily~1').text) === 'Saved first page.', 'the saved page must stay as it was');
@@ -119,7 +127,7 @@ await test('a draft older than the saved page is flagged as a conflict and never
   // another tab saves a newer version of the same page meanwhile
   await page.evaluate(() => { const m = JSON.parse(localStorage.getItem('daybook3d:v1')); m.pages['daily~1'] = { ...m.pages['daily~1'], text: 'Newer text from another tab.', updatedAt: Date.now() + 5000 }; window.__realSet.call(localStorage, 'daybook3d:v1', JSON.stringify(m)); });
   await reload(page);
-  await page.waitForSelector('#recover', { timeout: 15000 });
+  await recoverShown(page);
   const shown = await page.evaluate(() => document.querySelector('#recover').textContent);
   ok(/saved again after this writing/.test(shown) && shown.includes('Newer text from another tab.'), 'conflict not shown: ' + shown);
   ok(await page.evaluate(() => Daybook.state.pages.get('daily~1').text) === 'Newer text from another tab.', 'the newer saved text must be what is open');
@@ -130,7 +138,7 @@ await test('recovered writing is not shown before the PIN is entered', async pag
   await page.waitForTimeout(800);
   ok(!(await page.$('#recover')), 'the draft was shown over the lock screen');
   for (const k of '2580') await page.keyboard.press(k);
-  await page.waitForSelector('#recover', { timeout: 15000 });
+  await recoverShown(page);
   ok(await page.evaluate(() => document.querySelector('#lock').hidden), 'unlocked');
 }, { seed: { lib: { ...lib, settings: { ...lib.settings, pinHash: crypto.createHash('sha256').update('daybook:2580').digest('hex') } }, pages }, draft: { key: 'daily~1', value: { text: 'Secret unsaved line', date: '2026-10-20', mood: 0, base: 1000, at: Date.now() } } });
 

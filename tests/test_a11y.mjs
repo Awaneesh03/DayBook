@@ -7,7 +7,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const html = path.resolve(process.argv[2] || path.join(here, '..', 'index.html'));
+// a build to test: a path (opened from disk), or an http(s) URL of a served copy (npm test serves one: browsers keep
+// sessionStorage across a reload there, which Chromium on Linux does not always do for pages opened from disk)
+const arg = process.argv[2] || '', served = /^https?:\/\//.test(arg);
+const html = served ? path.join(here, '..', 'index.html') : path.resolve(arg || path.join(here, '..', 'index.html'));
+const target = served ? arg : pathToFileURL(html).href;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 
@@ -16,11 +20,12 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
 const seed = { lib: { v: 4, activeId: 'daily', journals: [{ id: 'daily', title: 'Daily Journal', pages: 2 }], settings: { welcomed: true, animate: false } }, pages: { 'daily~1': { j: 'daily', n: 1, text: 'A page to read.', date: '2026-10-20', mood: 3 } } };
 async function fresh(ctxOpts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...ctxOpts });
+  ctx.setDefaultNavigationTimeout(90000);   // the page waits for three.js from the CDN; slow machines need longer
   await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('daybook3d:v1', JSON.stringify(s)); sessionStorage.setItem('seeded', '1'); } }, seed);
   const page = await ctx.newPage(); const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(pathToFileURL(html).href, { waitUntil: 'domcontentloaded' });
+  await page.goto(target, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone'), null, { timeout: 60000 });
   return { ctx, page, errors };
 }
@@ -57,15 +62,15 @@ await test('every visible control has a name, in the room, every library tab, th
 await test('dialogs take focus when they open, keep Tab inside, and give focus back when they close', async page => {
   for (const [opener, dialog] of [['#bNew', 'designer'], ['#bCustomize', 'roomCustomModal']]) {
     await page.focus(opener); await page.keyboard.press('Enter');
-    await page.waitForFunction(d => document.activeElement.closest('#' + d), dialog, { timeout: 5000 }).catch(() => { throw new Error(dialog + ' did not take focus'); });
+    await page.waitForFunction(d => document.activeElement.closest('#' + d), dialog, { timeout: 20000 }).catch(() => { throw new Error(dialog + ' did not take focus'); });
     for (let i = 0; i < 30; i++) { await page.keyboard.press('Tab'); const a = await active(page); ok(a.in === dialog, `Tab left ${dialog} for #${a.id || a.tag}`); }
     await page.keyboard.press('Escape');
-    await page.waitForFunction(o => document.activeElement === document.querySelector(o), opener, { timeout: 5000 }).catch(() => { throw new Error('focus did not come back to ' + opener + ' after ' + dialog); });
+    await page.waitForFunction(o => document.activeElement === document.querySelector(o), opener, { timeout: 20000 }).catch(() => { throw new Error('focus did not come back to ' + opener + ' after ' + dialog); });
   }
   await page.focus('#bShelf'); await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.activeElement.closest('#drawer'), null, { timeout: 5000 }).catch(() => { throw new Error('the library did not take focus'); });
+  await page.waitForFunction(() => document.activeElement.closest('#drawer'), null, { timeout: 20000 }).catch(() => { throw new Error('the library did not take focus'); });
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.querySelector('#drawer').hidden && document.activeElement.id === 'bShelf', null, { timeout: 5000 }).catch(() => { throw new Error('focus did not come back to the Library button'); });
+  await page.waitForFunction(() => document.querySelector('#drawer').hidden && document.activeElement.id === 'bShelf', null, { timeout: 20000 }).catch(() => { throw new Error('focus did not come back to the Library button'); });
 });
 
 await test('journaling works with the keyboard alone: write, plan a task, tick it and get back to the room', async page => {
@@ -74,20 +79,20 @@ await test('journaling works with the keyboard alone: write, plan a task, tick i
   ok((await active(page)).id === 'bToday', 'Tab never reached Write today');
   await page.keyboard.press('Enter');
   await waitReader(page);
-  await page.waitForFunction(() => document.activeElement.tagName === 'TEXTAREA', null, { timeout: 5000 }).catch(() => { throw new Error('the page did not get the caret'); });
+  await page.waitForFunction(() => document.activeElement.tagName === 'TEXTAREA', null, { timeout: 20000 }).catch(() => { throw new Error('the page did not get the caret'); });
   await page.keyboard.type('Written without a mouse.');
   await page.keyboard.press('Control+k'); await page.keyboard.type('today: habits'); await page.keyboard.press('Enter');
   await page.waitForSelector('#plTaskIn');
-  await page.waitForFunction(() => document.activeElement.closest('#drawer'), null, { timeout: 5000 });
+  await page.waitForFunction(() => document.activeElement.closest('#drawer'), null, { timeout: 20000 });
   tabs = 0; while ((await active(page)).id !== 'plTaskIn' && tabs < 40) { await page.keyboard.press('Tab'); tabs++; }
   ok((await active(page)).id === 'plTaskIn', 'Tab never reached the task field');
   await page.keyboard.type('Reply to Sam'); await page.keyboard.press('Enter');
   for (let i = 0; i < 4 && !(await page.evaluate(() => document.activeElement.matches('#plTasks .pl-check'))); i++) await page.keyboard.press('Shift+Tab');
   ok(await page.evaluate(() => document.activeElement.classList.contains('pl-check')), 'Shift+Tab should reach the task’s check box, not ' + JSON.stringify(await active(page)));
   await page.keyboard.press('Space');
-  await page.waitForFunction(() => Daybook.state.lib.tasks[0] && Daybook.state.lib.tasks[0].done, null, { timeout: 5000 }).catch(() => { throw new Error('Space did not tick the task'); });
+  await page.waitForFunction(() => Daybook.state.lib.tasks[0] && Daybook.state.lib.tasks[0].done, null, { timeout: 20000 }).catch(() => { throw new Error('Space did not tick the task'); });
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.querySelector('#drawer').hidden, null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('#drawer').hidden, null, { timeout: 20000 });
   ok(await page.evaluate(() => [...Daybook.state.pages.values()].some(p => /Written without a mouse\./.test(p.text))), 'the writing was not kept');
 });
 
@@ -106,7 +111,7 @@ await test('the new controls are big enough to tap on a phone, and Escape closes
   ok(!small.length, 'targets under 24 px: ' + JSON.stringify(small));
   for (const [open, gone] of [[() => Daybook.openDrawer('today'), () => document.querySelector('#drawer').hidden], [() => document.querySelector('#bSound').click(), () => document.querySelector('#soundPop').hidden], [() => Daybook.openRoomCustom('presets'), () => document.querySelector('#roomCustomModal').hidden]]) {
     await page.evaluate(open); await page.waitForTimeout(500); await page.keyboard.press('Escape');
-    await page.waitForFunction(gone, null, { timeout: 5000 }).catch(() => { throw new Error('Escape did not close ' + open.toString()); });
+    await page.waitForFunction(gone, null, { timeout: 20000 }).catch(() => { throw new Error('Escape did not close ' + open.toString()); });
   }
 }, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 

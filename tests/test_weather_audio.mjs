@@ -10,7 +10,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const html = path.resolve(process.argv[2] || path.join(here, '..', 'index.html'));
+// a build to test: a path (opened from disk), or an http(s) URL of a served copy (npm test serves one: browsers keep
+// sessionStorage across a reload there, which Chromium on Linux does not always do for pages opened from disk)
+const arg = process.argv[2] || '', served = /^https?:\/\//.test(arg);
+const html = served ? path.join(here, '..', 'index.html') : path.resolve(arg || path.join(here, '..', 'index.html'));
+const target = served ? arg : pathToFileURL(html).href;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
 
@@ -46,9 +50,10 @@ const near = (a, b, tol = .02) => Math.abs(a - b) <= tol;
 // The page needs Google Fonts and the three.js CDN, so loads get a generous budget and wait for the DOM, not "load".
 async function waitReady(page) {
   await page.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone'), null, { timeout: 60000 });
-  // a first visit opens the welcome dialog ~1.4 s after boot: wait for it, then dismiss it, so it cannot pop up mid-test
-  await page.waitForFunction(() => Daybook.S().welcomed || Daybook.S().pinHash || !document.querySelector('#welcome').hidden, null, { timeout: 20000 }).catch(() => {});
+  // a first visit opens the welcome dialog ~1.4 s after boot (half a minute on slow machines, whose first software-rendered frames hold up its timer): wait for it, then dismiss it, so it cannot pop up mid-test
+  await page.waitForFunction(() => Daybook.S().welcomed || Daybook.S().pinHash || !document.querySelector('#welcome').hidden, null, { timeout: 60000 }).catch(() => {});
   await page.evaluate(() => { const b = document.querySelector('#wLook'); if (b && !document.querySelector('#welcome').hidden) b.click(); });
+  await page.evaluate(() => { Daybook.S().welcomed = true; });   // a late welcome (slow machines) must not cover a test that is not about it
 }
 async function reload(page) { await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }); await waitReady(page); }
 async function fresh({ strict = false, reduced = false } = {}) {
@@ -61,7 +66,7 @@ async function fresh({ strict = false, reduced = false } = {}) {
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); if (m.type() === 'warning' && /AudioContext/.test(m.text())) warns.push(m.text()); });
   const t = { ctx, page, errors, warns };
-  try { await page.goto(pathToFileURL(html).href, { waitUntil: 'domcontentloaded' }); await waitReady(page); }
+  try { await page.goto(target, { waitUntil: 'domcontentloaded' }); await waitReady(page); }
   catch (e) { await ctx.close(); throw e; }
   return t;
 }
@@ -174,7 +179,9 @@ await test('rain really appears on screen and is gone again when the weather cle
   await weather('clear');
   await page.waitForFunction(() => Daybook.R3.night === 1 && Daybook.R3.cam.t >= 1, null, { timeout: 30000 });
   const clip = { x: 1150, y: 60, width: 130, height: 440 };       // the window at the default camera
-  const shot = async () => { await page.waitForTimeout(600); return (await page.screenshot({ clip })).toString('base64'); };
+  // the picture once it has settled: two shots in a row the same (a fixed wait was too short on slow CI machines, whose
+  // software WebGL had not drawn the new weather yet)
+  const shot = async () => { let a = '', b = ''; for (let i = 0; i < 15 && (!a || a !== b); i++) { a = b; await page.waitForTimeout(600); b = (await page.screenshot({ clip })).toString('base64'); } return b; };
   const clear1 = await shot();
   ok(clear1 === await shot(), 'harness: a clear night window should be a still picture');
   await weather('rain');

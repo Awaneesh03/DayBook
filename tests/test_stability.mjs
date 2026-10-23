@@ -12,7 +12,11 @@ import http from 'node:http';
 import vm from 'node:vm';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const html = path.resolve(process.argv[2] || path.join(here, '..', 'index.html'));
+// a build to test: a path (opened from disk), or an http(s) URL of a served copy (npm test serves one: browsers keep
+// sessionStorage across a reload there, which Chromium on Linux does not always do for pages opened from disk)
+const arg = process.argv[2] || '', served = /^https?:\/\//.test(arg);
+const html = served ? path.join(here, '..', 'index.html') : path.resolve(arg || path.join(here, '..', 'index.html'));
+const target = served ? arg : pathToFileURL(html).href;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 
@@ -20,9 +24,12 @@ let failed = 0;
 const ok = (c, m) => { if (!c) throw new Error(m); };
 async function waitReady(page) {
   await page.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone'), null, { timeout: 60000 });
-  // a first visit opens the welcome dialog ~1.4 s after boot: wait for it, then dismiss it, so it cannot pop up mid-test
-  await page.waitForFunction(() => Daybook.S().welcomed || Daybook.S().pinHash || !document.querySelector('#welcome').hidden, null, { timeout: 20000 }).catch(() => {});
+  // a first visit opens the welcome dialog ~1.4 s after boot (half a minute on slow machines, whose first software-rendered frames hold up its timer): wait for it, then dismiss it, so it cannot pop up mid-test
+  await page.waitForFunction(() => Daybook.S().welcomed || Daybook.S().pinHash || !document.querySelector('#welcome').hidden, null, { timeout: 60000 }).catch(() => {});
   await page.evaluate(() => { const b = document.querySelector('#wLook'); if (b && !document.querySelector('#welcome').hidden) b.click(); });
+  // on a slow machine its timer can fire after the wait above gave up, over whatever the test is doing; these tests are
+  // not about the welcome (its own tests use a context of their own), so it must not come up later
+  await page.evaluate(() => { Daybook.S().welcomed = true; });
 }
 async function reload(page) { await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }); await waitReady(page); }
 // seed: a saved library ({ lib, pages }) to place in localStorage before the first load only. url: load this instead of the file.
@@ -37,7 +44,7 @@ async function fresh({ seed = null, url = null } = {}) {
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('dialog', d => { dialogs.push(d.type() + ': ' + d.message()); d.dismiss().catch(() => {}); });
-  try { await page.goto(url || pathToFileURL(html).href, { waitUntil: 'domcontentloaded' }); await waitReady(page); }
+  try { await page.goto(url || target, { waitUntil: 'domcontentloaded' }); await waitReady(page); }
   catch (e) { await ctx.close(); throw e; }
   return { ctx, page, errors, dialogs };
 }
@@ -313,8 +320,9 @@ await test('text, and the symbols the app saves, stay intact when a server names
 plain.close();
 
 /* ---- found in the launch QA pass ---- */
-const readerOpen = page => page.waitForFunction(() => { const r = document.querySelector('#reader'); return !r.hidden && r.classList.contains('show') && Daybook.R3.paused; }, null, { timeout: 30000 });
-const readerClosed = page => page.waitForFunction(() => document.querySelector('#reader').hidden && !Daybook.R3.paused, null, { timeout: 30000 });
+// generous: with two tabs both drawing the room in software on a small CI machine, a journal can take tens of seconds to open
+const readerOpen = page => page.waitForFunction(() => { const r = document.querySelector('#reader'); return !r.hidden && r.classList.contains('show') && Daybook.R3.paused; }, null, { timeout: 90000 });
+const readerClosed = page => page.waitForFunction(() => document.querySelector('#reader').hidden && !Daybook.R3.paused, null, { timeout: 90000 });
 async function write(page, journal, words) {
   await page.evaluate(i => Daybook.openJournal(Daybook.state.lib.journals[i].id), journal); await readerOpen(page);
   await page.locator('#reader textarea:visible').first().focus(); await page.keyboard.type(words);
@@ -374,6 +382,7 @@ await test('saving a copy downloads a Markdown file when not inside Claude', asy
 // the welcome opened 1.4 s after loading even over a journal the visitor had already opened, and blocked it
 await test('the welcome does not cover a journal opened straight away', async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  ctx.setDefaultNavigationTimeout(90000);   // the page waits for three.js from the CDN; slow machines need longer
   try {
     const p = await ctx.newPage();
     // Click Write today the moment the loader goes, from inside the page. (Waiting for that from the test polls once per
@@ -387,7 +396,7 @@ await test('the welcome does not cover a journal opened straight away', async ()
       });
       mo.observe(document.querySelector('#loader'), { attributes: true });
     }));
-    await p.goto(pathToFileURL(html).href, { waitUntil: 'domcontentloaded' });
+    await p.goto(target, { waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone') && window.__welcomeAtClick !== undefined, null, { timeout: 60000 });
     ok(await p.evaluate(() => window.__welcomeAtClick === false), 'test setup: the welcome was already showing when Write today was clicked');
     await p.waitForTimeout(4000);   // well past the welcome's 1.4 s timer: this checks that something does not happen

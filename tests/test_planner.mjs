@@ -6,7 +6,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const html = path.resolve(process.argv[2] || path.join(here, '..', 'index.html'));
+// a build to test: a path (opened from disk), or an http(s) URL of a served copy (npm test serves one: browsers keep
+// sessionStorage across a reload there, which Chromium on Linux does not always do for pages opened from disk)
+const arg = process.argv[2] || '', served = /^https?:\/\//.test(arg);
+const html = served ? path.join(here, '..', 'index.html') : path.resolve(arg || path.join(here, '..', 'index.html'));
+const target = served ? arg : pathToFileURL(html).href;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 
@@ -29,12 +33,13 @@ const basePages = {
 
 async function fresh({ seed = { lib: baseLib(), pages: basePages }, ctxOpts = {} } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...ctxOpts });
+  ctx.setDefaultNavigationTimeout(90000);   // the page waits for three.js from the CDN; slow machines need longer
   await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('daybook3d:v1', JSON.stringify(s)); sessionStorage.setItem('seeded', '1'); } }, seed);
   const page = await ctx.newPage(); const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('dialog', d => { errors.push('dialog: ' + d.message()); d.dismiss().catch(() => {}); });
-  await page.goto(pathToFileURL(html).href, { waitUntil: 'domcontentloaded' });
+  await page.goto(target, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone'), null, { timeout: 60000 });
   return { ctx, page, errors };
 }

@@ -9,7 +9,11 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const html = path.resolve(process.argv[2] || path.join(here, '..', 'index.html'));
+// a build to test: a path (opened from disk), or an http(s) URL of a served copy (npm test serves one: browsers keep
+// sessionStorage across a reload there, which Chromium on Linux does not always do for pages opened from disk)
+const arg = process.argv[2] || '', served = /^https?:\/\//.test(arg);
+const html = served ? path.join(here, '..', 'index.html') : path.resolve(arg || path.join(here, '..', 'index.html'));
+const target = served ? arg : pathToFileURL(html).href;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 
@@ -23,9 +27,10 @@ let failed = 0;
 const ok = (c, m) => { if (!c) throw new Error(m); };
 async function waitReady(page) {
   await page.waitForFunction(() => window.Daybook && window.Daybook.R3 && document.querySelector('#loader.gone'), null, { timeout: 60000 });
-  // a first visit opens the welcome dialog ~1.4 s after boot: wait for it, then dismiss it, so it cannot pop up mid-test
-  await page.waitForFunction(() => Daybook.S().welcomed || Daybook.S().pinHash || !document.querySelector('#welcome').hidden, null, { timeout: 20000 }).catch(() => {});
+  // a first visit opens the welcome dialog ~1.4 s after boot (half a minute on slow machines, whose first software-rendered frames hold up its timer): wait for it, then dismiss it, so it cannot pop up mid-test
+  await page.waitForFunction(() => Daybook.S().welcomed || Daybook.S().pinHash || !document.querySelector('#welcome').hidden, null, { timeout: 60000 }).catch(() => {});
   await page.evaluate(() => { const b = document.querySelector('#wLook'); if (b && !document.querySelector('#welcome').hidden) b.click(); });
+  await page.evaluate(() => { Daybook.S().welcomed = true; });   // a late welcome (slow machines) must not cover a test that is not about it
 }
 async function fresh({ reduced = false, viewport = { width: 1280, height: 800 } } = {}) {
   const ctx = await browser.newContext({ viewport, reducedMotion: reduced ? 'reduce' : 'no-preference' });
@@ -34,7 +39,7 @@ async function fresh({ reduced = false, viewport = { width: 1280, height: 800 } 
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  try { await page.goto(pathToFileURL(html).href, { waitUntil: 'domcontentloaded' }); await waitReady(page); }
+  try { await page.goto(target, { waitUntil: 'domcontentloaded' }); await waitReady(page); }
   catch (e) { await ctx.close(); throw e; }
   return { ctx, page, errors };
 }

@@ -234,7 +234,7 @@ function showReader(id, n, pop) {
   // nor neither show; the reflow lets the fades start from hidden
   RD.inHand = id; void rd.offsetWidth; rd.classList.add('show');
   document.body.classList.add('reading');   // hides the room header, which Safari otherwise shows through the reader's scrim
-  if (R3) setTimeout(() => { if (RD.open) R3.paused = true; }, 450);
+  if (R3) setTimeout(() => { if (RD.open) { finishCamera(); R3.paused = true; } }, 450);
   $('#tip').hidden = true;
   setSaveState(state.store && state.store.kind === 'cloud' ? 'Saved to your account' : 'Saved in this browser');
   if (pop) openPop(pop);

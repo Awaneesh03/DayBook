@@ -724,6 +724,13 @@ function startCameraTransition(toPos, toTarget, dur, onDone, mode) {
   c.onDone = onDone || null;
 }
 
+// Ends a camera move where it was going. The reader pauses the room a moment after it opens; on a slow device that can
+// come before the move's last frame, which left the camera at 98% of the way with the room paused.
+function finishCamera() {
+  const c = R3.cam; if (c.t >= 1) return;
+  c.t = 1; c.pos.copy(c.toPos); c.target.copy(c.toTarget);
+  if (c.onDone) { const cb = c.onDone; c.onDone = null; cb(); }
+}
 function resetCameraToRoom(dur, onDone, yaw, pitch) {
   const c = R3.cam;
   yaw = yaw || 0; pitch = pitch || 0;

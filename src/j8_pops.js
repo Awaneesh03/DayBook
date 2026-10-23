@@ -159,6 +159,8 @@ function photoIds(lib, pages) {
   Object.values(pages).forEach(p => (p.items || []).forEach(it => { if (it && it.mid) s.add(it.mid); }));
   return s;
 }
+// habits and tasks, when there are any, for the restore preview
+const planSummary = lib => (lib.habits || []).length || (lib.tasks || []).length ? ', plus ' + plural((lib.habits || []).length, 'habit') + ' and ' + plural((lib.tasks || []).length, 'task') : '';
 function libSummary(journals, pages, photos) {
   const written = Object.values(pages).filter(p => (p.text || '').trim() || (p.items || []).length || (p.ink || []).length);
   return plural(journals, 'journal') + ', ' + plural(written.length, 'written page') + ', ' + plural(written.reduce((a, p) => a + countWords(p.text), 0), 'word') + ' and ' + plural(photos, 'photo');
@@ -218,7 +220,7 @@ function checkBackup(text) {
   lib.journals.forEach(j => { j.pages = Math.min(j.pages, MAX_PAGES); Object.values(pages).forEach(p => { if (p.j === j.id && p.n > j.pages) j.pages = p.n; }); });
   if (lib.activeId && !ids.has(lib.activeId)) lib.activeId = null;
   const created = new Date(d.createdAt);
-  return { lib, pages, media, info: { created: isNaN(created) ? null : created, summary: libSummary(lib.journals.length, pages, Object.keys(media).length), missing: [...want].filter(m => !media[m]).length, skipped } };
+  return { lib, pages, media, info: { created: isNaN(created) ? null : created, summary: libSummary(lib.journals.length, pages, Object.keys(media).length) + planSummary(lib), missing: [...want].filter(m => !media[m]).length, skipped } };
 }
 // Full replacement, once the visitor has confirmed it: a safety copy of what is here goes to their downloads first,
 // then everything is written in one go (put back as it was if any write fails) and the page reloads into the backup.
@@ -239,6 +241,7 @@ async function restoreBackup(b) {
   }
   // in this browser, success is only claimed by the reloaded page, once it finds this restore still stored (checkRestored)
   try { if (mark) sessionStorage.setItem(RESTORE_CHECK, mark); } catch (e) { mark = null; }
+  dropAllDrafts();   // unsaved writing kept for the replaced journals no longer belongs to anything here
   toast(mark ? 'Opening the restored backup…' : 'Backup restored. Opening it now…'); setTimeout(() => location.reload(), 700);
 }
 const RESTORE_CHECK = 'daybook3d:restore-check';

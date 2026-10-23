@@ -11,7 +11,7 @@ def build():
         'j1_core.js', 'j2_paint.js', 'j3_data.js', 'j4_room.js',
         'j5_room_actions.js', 'j6_reader.js', 'j7_decor.js',
         'j8_pops.js', 'j9_studio.js', 'j10_library.js',
-        'j12_turn.js', 'j11_boot.js'
+        'j12_turn.js', 'j13_planner.js', 'j11_boot.js'
     ]
 
     js_parts = []

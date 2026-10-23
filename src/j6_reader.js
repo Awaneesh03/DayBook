@@ -244,6 +244,7 @@ function closeReader() {
   if (!RD.open) return;
   flushAll();
   const j = curJ(); if (j && j.last !== RD.n) { j.last = RD.n; saveLib(); }
+  if (RD.focusMode) { RD.focusMode = false; $('#reader').classList.remove('focus'); $('#rFocus').setAttribute('aria-pressed', 'false'); }
   RD.open = false; RD.closing = true; closePop(); if (RD.drawing) toggleDraw(false); RD.sel = null;
   clearTimeout(RD.flapT); // the opening's tidy-up would hide the cover partway through this close; finish() tidies up instead
   pageEls.forEach(el => { el._pen.classList.remove('on'); });

@@ -70,10 +70,12 @@ async function exportFile(page) {
 }
 async function choose(page, file) {
   await settings(page);
+  // this file's own result: the preview, or a refusal that was not already on screen (an earlier one, or the low-space note, must not count)
+  await page.evaluate(() => document.querySelectorAll('#bkCard .bk-msg').forEach(m => m.setAttribute('data-old', '')));
   const [fc] = await Promise.all([page.waitForEvent('filechooser'), press(page, 'Restore from a backup…')]);
   await fc.setFiles(file);
-  await page.waitForFunction(() => document.querySelector('#bkCard .confirm, #bkCard .bk-msg'), null, { timeout: 20000 });
-  return page.evaluate(() => ({ msg: (document.querySelector('#bkCard .bk-msg') || {}).textContent || '', preview: (document.querySelector('#bkCard .confirm') || {}).textContent || '' }));
+  await page.waitForFunction(() => document.querySelector('#bkCard .confirm, #bkCard .bk-msg[role=alert]:not([data-old])'), null, { timeout: 20000 });
+  return page.evaluate(() => ({ msg: (document.querySelector('#bkCard .bk-msg[role=alert]') || {}).textContent || '', preview: (document.querySelector('#bkCard .confirm') || {}).textContent || '' }));
 }
 const stored = page => page.evaluate(() => { const o = {}; for (const k of Object.keys(localStorage)) if (k.startsWith('daybook3d:')) o[k] = localStorage.getItem(k); return JSON.stringify(o, Object.keys(o).sort()); });
 // what is stored once the app's own saves have landed (the first load writes the seed back in its tidied form)
@@ -161,7 +163,7 @@ await test('cancelling the preview or the file picker changes nothing', async pa
   const [fc] = await Promise.all([page.waitForEvent('filechooser'), press(page, 'Restore from a backup…')]);
   await fc.setFiles([]);
   await page.waitForTimeout(500);
-  ok(await page.evaluate(() => !document.querySelector('#bkCard .confirm, #bkCard .bk-msg')), 'a cancelled picker should do nothing');
+  ok(await page.evaluate(() => !document.querySelector('#bkCard .confirm, #bkCard .bk-msg[role=alert]')), 'a cancelled picker should do nothing');
   ok(await stored(page) === before, 'storage changed');
 }, { seed });
 
@@ -173,15 +175,15 @@ await test('a restore that does not fit in storage is undone completely and says
   const shown = await choose(page, file);
   ok(shown.preview, 'no preview: ' + shown.msg);
   const [first] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), press(page, 'Replace everything with this backup')]);
-  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg'), null, { timeout: 20000 });
-  const msg = await page.evaluate(() => document.querySelector('#bkCard .bk-msg').textContent);
+  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg[role=alert]'), null, { timeout: 20000 });
+  const msg = await page.evaluate(() => document.querySelector('#bkCard .bk-msg[role=alert]').textContent);
   ok(/no room left/.test(msg) && /Nothing was changed/.test(msg), 'message: ' + msg);
   ok(await stored(page) === before, 'storage was not put back');
   ok(await page.evaluate(() => Daybook.state.pages.get('daily~1').text.startsWith('Café')), 'the journals on screen changed');
   await page.waitForTimeout(1100);   // a second try in the same day must not name an older safety copy
   await page.click('#bShelf'); await choose(page, file);
   const [again] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), press(page, 'Replace everything with this backup')]);
-  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg'), null, { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg[role=alert]'), null, { timeout: 20000 });
   ok(again.suggestedFilename() !== first.suggestedFilename(), 'two safety copies share a name: ' + again.suggestedFilename());
   await page.evaluate(() => { for (let i = 0; i < 100; i++) localStorage.removeItem('filler' + i); });
 }, { seed });
@@ -210,6 +212,40 @@ await test('a backup with odd but harmless values restores and opens without err
   await settings(page);
   for (const tab of ['insights', 'journals', 'settings']) await page.evaluate(t => [...document.querySelectorAll('#drawer [role=tab]')].find(x => x.textContent.toLowerCase().includes(t)).click(), tab);
   ok(!hits.length, 'imported values made the page fetch: ' + hits);
+});
+
+// habits, tasks and the review pages live in the library, so a backup carries them; a later app version must still
+// restore older backups without them (every test above), and planner data that is malformed is left out, never trusted
+const planLib = { ...lib, habits: [{ id: 'h1', name: 'Read 10 pages', days: [1, 2, 3, 4, 5], start: '2026-01-01', done: { '2026-01-15': true } }],
+  tasks: [{ id: 't1', text: 'Post the letter ✉️', date: '2026-01-15', done: false, created: 1, link: { j: 'daily', n: 1 } }], reviews: { 'daily:2026-01-15': { j: 'daily', n: 2 } } };
+let planBackup = null;
+await test('habits, tasks and review links travel in a full backup and come back on another device', async page => {
+  const b = await exportFile(page);
+  ok(b.data.lib.habits[0].name === 'Read 10 pages' && b.data.lib.habits[0].done['2026-01-15'] === true && b.data.lib.tasks[0].text === 'Post the letter ✉️' && b.data.lib.reviews['daily:2026-01-15'].n === 2, 'planner data missing from the backup: ' + JSON.stringify([b.data.lib.habits, b.data.lib.tasks, b.data.lib.reviews]));
+  planBackup = b.file;
+}, { seed: { 'daybook3d:v1': JSON.stringify({ lib: planLib, pages }) } });
+await test('restoring brings habits, tasks and review links back, and the preview mentions them', async page => {
+  ok(planBackup, 'needs the backup made by the previous test');
+  const shown = await choose(page, planBackup);
+  ok(/plus 1 habit and 1 task/.test(shown.preview), 'preview: ' + shown.preview);
+  await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.waitForEvent('framenavigated', { timeout: 30000 }), press(page, 'Replace everything with this backup')]);
+  await waitReady(page);
+  const l = await page.evaluate(() => Daybook.state.lib);
+  ok(l.habits.length === 1 && l.habits[0].done['2026-01-15'] && l.tasks.length === 1 && l.tasks[0].link.n === 1 && l.reviews['daily:2026-01-15'].n === 2, 'after restore: ' + JSON.stringify([l.habits, l.tasks, l.reviews]));
+});
+await test('malformed habits and tasks in a backup are left out, not trusted', async page => {
+  const odd = { format: 'daybook-backup', version: 1, lib: { ...lib, habits: [{ id: 'ok1', name: 'Fine', days: [1], done: { '2026-01-05': true, '__proto__': true, 'x': true } }, { id: '../bad', name: 'Bad id' }, null, 'junk', { id: 'ok1', name: 'Duplicate' }, { id: 'h2', name: 'x'.repeat(500), days: [9, -1], done: [] }],
+    tasks: [{ id: 'tk', text: 'Keep me', date: '2026-01-05' }, { id: 'nodate', text: 'No date' }, { id: 'empty', text: '   ', date: '2026-01-05' }, { id: 'link', text: 'Bad link', date: '2026-01-05', link: { j: 'x', n: 'one' } }],
+    reviews: { 'daily:2026-01-05': { j: 'daily', n: 1 }, 'weird:2026-01-05': { j: 'daily', n: 1 }, 'daily:2026-01-06': { j: 'daily', n: 5000 } } }, pages: {} };
+  const shown = await choose(page, writeJson('odd-planner.json', odd));
+  ok(shown.preview && /plus 2 habits and 2 tasks/.test(shown.preview), 'preview: ' + JSON.stringify(shown));
+  await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.waitForEvent('framenavigated', { timeout: 30000 }), press(page, 'Replace everything with this backup')]);
+  await waitReady(page);
+  const l = await page.evaluate(() => Daybook.state.lib);
+  ok(l.habits.map(x => x.id).join() === 'ok1,h2' && Object.keys(l.habits[0].done).join() === '2026-01-05' && l.habits[1].name.length === 60 && l.habits[1].days.length === 7, 'habits: ' + JSON.stringify(l.habits));
+  ok(l.tasks.map(t => t.id).join() === 'tk,link' && l.tasks[1].link === null, 'tasks: ' + JSON.stringify(l.tasks));
+  ok(Object.keys(l.reviews).join() === 'daily:2026-01-05', 'reviews: ' + JSON.stringify(l.reviews));
+  ok(await page.evaluate(() => ({}).polluted === undefined && Object.getPrototypeOf(Daybook.state.lib.habits[0].done) === Object.prototype), 'prototype touched');
 });
 
 await test('another tab cannot save what it held over a restore, and opens the restored journals', async (page, t) => {
@@ -248,8 +284,8 @@ await test('if another tab saves over a restore after its re-check, the reloaded
   await choose(page, goodBackup);
   await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.waitForEvent('framenavigated', { timeout: 30000 }), press(page, 'Replace everything with this backup')]);
   await waitReady(page);
-  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg'), null, { timeout: 20000 });
-  const s = await page.evaluate(() => ({ msg: document.querySelector('#bkCard .bk-msg').textContent, toast: document.querySelector('#toast').textContent, left: sessionStorage.getItem('daybook3d:restore-check') }));
+  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg[role=alert]'), null, { timeout: 20000 });
+  const s = await page.evaluate(() => ({ msg: document.querySelector('#bkCard .bk-msg[role=alert]').textContent, toast: document.querySelector('#toast').textContent, left: sessionStorage.getItem('daybook3d:restore-check') }));
   ok(/Another Daybook tab saved over the backup/.test(s.msg) && /restore it again/.test(s.msg), 'message: ' + s.msg);
   ok(s.toast !== 'Backup restored.' && s.left === null, 'must not claim success: ' + JSON.stringify(s));
 });
@@ -287,8 +323,8 @@ await test('inside Claude, a restore that fails part way is undone and says so',
   await choose(page, goodBackup);
   await page.evaluate(() => { window.__fail = { after: 3, forever: false }; });   // photos and a page land, then one write fails
   await Promise.all([page.waitForEvent('download', { timeout: 20000 }), press(page, 'Replace everything with this backup')]);
-  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg'), null, { timeout: 20000 });
-  const msg = await page.evaluate(() => document.querySelector('#bkCard .bk-msg').textContent);
+  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg[role=alert]'), null, { timeout: 20000 });
+  const msg = await page.evaluate(() => document.querySelector('#bkCard .bk-msg[role=alert]').textContent);
   ok(/Nothing was changed/.test(msg), 'message: ' + msg);
   ok(await cloudNow(page) === before, 'the stored journals were not put back');
   ok(await page.evaluate(() => !Daybook.state.restoring), 'saving should carry on after an undone restore');
@@ -300,8 +336,8 @@ await test('inside Claude, a restore that cannot be undone says so, names the sa
   await choose(page, goodBackup);
   await page.evaluate(() => { window.__fail = { after: 2, forever: true }; });   // the connection drops for good part way
   const [safety] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), press(page, 'Replace everything with this backup')]);
-  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg'), null, { timeout: 20000 });
-  const msg = await page.evaluate(() => document.querySelector('#bkCard .bk-msg').textContent);
+  await page.waitForFunction(() => document.querySelector('#bkCard .bk-msg[role=alert]'), null, { timeout: 20000 });
+  const msg = await page.evaluate(() => document.querySelector('#bkCard .bk-msg[role=alert]').textContent);
   ok(!/Nothing was changed/.test(msg) && /could not put everything back/.test(msg) && msg.includes(safety.suggestedFilename()), 'message: ' + msg);
   await page.evaluate(() => { window.__fail = null; });   // back online: what this tab holds is from before the restore and must not be saved now
   const after = await cloudNow(page);

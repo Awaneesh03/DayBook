@@ -17,7 +17,7 @@ function fontsReady() {
 }
 function wireUI() {
   const spread = $('#spread'); ['L', 'R'].forEach((s, i) => { const el = buildPageEl(s, i); pageEls.push(el); spread.append(el); });
-  buildLock(); bindStudio(); bindSwipe();
+  buildLock(); bindStudio(); bindSwipe(); watchDialogs();
   $('#bToday').addEventListener('click', writeToday);
   $('#bShelf').addEventListener('click', () => { if ($('#drawer').classList.contains('open')) closeDrawer(); else openDrawer(); });
   $('#bNew').addEventListener('click', () => openDesigner(null));
@@ -51,6 +51,8 @@ function wireUI() {
   $('#rPrev').addEventListener('click', () => turn(-1));
   $('#rNext').addEventListener('click', () => turn(1));
   $('#rDraw').addEventListener('click', () => toggleDraw());
+  $('#rFocus').addEventListener('click', () => setFocusMode(!RD.focusMode));
+  $('#rFocusExit').addEventListener('click', () => setFocusMode(false));
   $$('[data-pop]').forEach(b => b.addEventListener('click', () => openPop(b.dataset.pop)));
   $$('.s-tabs [data-st]').forEach(b => b.addEventListener('click', () => { DS.tab = b.dataset.st; if (DS.tab === 'draw' || DS.tab === 'style') DS.sel = -1; renderStudio(); }));
   $('#dClose').addEventListener('click', closeDesigner); $('#dCancel').addEventListener('click', closeDesigner);
@@ -68,7 +70,9 @@ function wireUI() {
   });
   document.addEventListener('keydown', e => {
     if (isLocked()) return;
-    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); flushAll(); toast('Saved.'); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openQuickNav(); return; }   // types nothing, so it is safe even on a page
+    // says Saved only once everything is stored: a save that failed is tried again, and still failing says so
+    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); flushAll().then(() => toast(unsaved() ? 'Not saved yet. Daybook keeps trying, and your writing stays on screen.' : 'Saved.')); return; }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !$('#designer').hidden && !/TEXTAREA|INPUT/.test(document.activeElement.tagName)) { e.preventDefault(); undoStudio(); return; }
     if (e.key === 'Escape') {
       if (!RD.open && cancelOpen()) return;
@@ -83,6 +87,7 @@ function wireUI() {
       else if (RD.drawing) toggleDraw(false);
       else if (RD.sel) { RD.sel = null; renderItemsAll(); }
       else if (RD.pop) closePop();
+      else if (RD.focusMode) setFocusMode(false);
       else if (RD.open) closeReader();
       else { closeDrawer(); closeSoundPop(); }
       return;
@@ -149,7 +154,7 @@ async function boot() {
     if (init.legacy && init.legacy.length) toWrite.push(...importLegacy(lib, pages, init.legacy));
     state.lib = lib; saveLib(true);
   } else state.lib = normLib(lib);
-  Object.keys(pages).forEach(k => state.pages.set(k, pages[k]));
+  Object.keys(pages).forEach(k => { state.pages.set(k, pages[k]); savedAt.set(k, pages[k].updatedAt || 0); });
   toWrite.forEach(k => queue(() => st.writePage(k, pages[k])));
   try { st.subscribe(onRemoteLib, onRemotePages, () => toast('Lost the connection to your journals. Changes on screen will retry.')); } catch (e) { /* local store */ }
   state.ready = true;
@@ -161,8 +166,9 @@ async function boot() {
   updateHudSub();
   $('#loader').classList.add('gone');
   if (S().pinHash) showLock();
-  checkRestored();
-  if (has3d) setHint(R3.mobile ? 'Tap a journal to take it down, then tap it on the desk to open. Drag to look around.' : 'Click a journal to take it down, then click it on the desk to open. Drag to look around.');
+  checkRestored(); offerDrafts();
+  if (has3d && !state.lib.journals.length) setHint('No journals yet. Design your first one: New journal, or Library on a phone.');   // nothing on the shelf to click
+  else if (has3d) setHint(R3.mobile ? 'Tap a journal to take it down, then tap it on the desk to open. Drag to look around.' : 'Click a journal to take it down, then click it on the desk to open. Drag to look around.');
   else { openDrawer(); fadeHint(); }
   if (!S().welcomed && !S().pinHash) setTimeout(() => showWelcome(), has3d ? 1400 : 300);
   else setTimeout(showMemory, 2200);
@@ -180,7 +186,8 @@ async function boot() {
     openJournal, takeDown, closeReader, writeToday,
     openDrawer, closeDrawer,
     applyRoomStyle, applySettings, sfx, toast,
-    SND, setAmbient, cycleSound, weatherMode, skyTarget
+    SND, setAmbient, cycleSound, weatherMode, skyTarget,
+    searchAll, openQuickNav, closeQuickNav, setFocusMode, habitStreak, reviewText, startReview, addTask, carryForward, pendingDrafts, offerDrafts, flushAll, unsaved
   };
 }
 boot();

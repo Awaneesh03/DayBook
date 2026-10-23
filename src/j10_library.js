@@ -4,10 +4,11 @@
 const LB = { tab: 'journals', calY: new Date().getFullYear(), calM: new Date().getMonth(), calSel: null, pinStep: null };
 function openDrawer(tab) { if (isLocked()) return; closeSoundPop(); hideMemory(); const dr = $('#drawer'); if (tab) LB.tab = tab; dr.hidden = false; renderDrawer(); requestAnimationFrame(() => dr.classList.add('open')); fadeHint(); }
 function closeDrawer() { if (document.body.classList.contains('no3d')) return; const dr = $('#drawer'); dr.classList.remove('open'); setTimeout(() => { if (!dr.classList.contains('open')) dr.hidden = true; }, 450); }
-function renderDrawerSoft() { if (LB.tab === 'journals') { renderJournalList(); renderSearch(); } else if (LB.tab !== 'settings') renderDrawer(); }
+// (not under a field being typed in: a save from another tab must not wipe a half-typed task or habit)
+function renderDrawerSoft() { const a = document.activeElement; if (a && a.closest && a.closest('#drBody') && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && a.id !== 'drSearch') return; if (LB.tab === 'journals') { renderJournalList(); renderSearch(); } else if (LB.tab !== 'settings') renderDrawer(); }
 function renderDrawer() {
   if (!state.lib) return;
-  const tabs = { journals: tabJournals, calendar: tabCalendar, insights: tabInsights, settings: tabSettings };
+  const tabs = { journals: tabJournals, today: tabToday, calendar: tabCalendar, insights: tabInsights, settings: tabSettings };
   if (!tabs[LB.tab]) LB.tab = 'journals';   // the shelf and the pen cup ask for 'library', which is not a tab
   $$('.dtabs [data-dt]').forEach(b => b.setAttribute('aria-selected', b.dataset.dt === LB.tab ? 'true' : 'false'));
   const body = $('#drBody'); body.textContent = ''; body.scrollTop = 0;
@@ -34,12 +35,14 @@ function tabJournals(body) {
   const pagesW = writtenPages().length;
   body.append(h('div', { class: 'stats' }, [[state.lib.journals.length, 'journals'], [pagesW, 'pages'], [totalWords(), 'words'], [currentStreak(), 'day streak']].map(([v, l]) => h('div', { class: 'stat' }, h('b', { text: v.toLocaleString() }), h('span', { text: l })))));
   const q = h('input', { class: 'search', id: 'drSearch', type: 'search', placeholder: 'Search every journal or #tag', autocomplete: 'off', 'aria-label': 'Search every journal' });
-  q.value = LB.q || ''; q.addEventListener('input', () => { LB.q = q.value; renderSearch(); });
+  // a short pause before searching a large library, so typing stays smooth
+  q.value = LB.q || ''; q.addEventListener('input', () => { LB.q = q.value; clearTimeout(LB.qt); if (state.pages.size > 1500) LB.qt = setTimeout(renderSearch, 120); else renderSearch(); });
   body.append(q);
   const tags = topTags(10);
   if (tags.length) body.append(h('div', { class: 'tags' }, tags.map(([t, c]) => h('button', { type: 'button', class: 'chip', onclick: () => { q.value = t; LB.q = t; renderSearch(); } }, t + ' ', h('small', { text: String(c), style: 'opacity:.6' })))));
   body.append(h('div', { class: 'results', id: 'drResults' }), h('ul', { class: 'jl', id: 'drList' }));
   body.append(h('button', { type: 'button', class: 'btn accent', onclick: () => openDesigner(null) }, '+ Design a new journal'));
+  if (!(R3 && R3.mobile)) body.append(h('p', { class: 'note', text: 'Tip: press ' + (/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl+K') + ' anywhere to jump to a journal, a page or any action.' }));
   body.append(h('p', { class: 'note', text: state.store && state.store.kind === 'cloud' ? 'Saved to your account. Only you can read your journals, even if you share this page.' : window.claude ? 'Saved in this browser only. Open Daybook in Claude while signed in to keep journals on your account.' : 'Saved in this browser on this device only. Clearing your browsing data erases it, so save a copy now and then (Settings).' }));
   renderJournalList(); renderSearch();
 }
@@ -61,18 +64,11 @@ function renderSearch() {
   const res = $('#drResults'); if (!res) return; res.textContent = '';
   const q = (LB.q || '').trim(); const list = $('#drList'); if (list) list.hidden = !!q;
   if (!q) return;
-  const ql = q.toLowerCase(); const hits = [];
-  for (const p of state.pages.values()) { if ((p.text || '').toLowerCase().indexOf(ql) >= 0) hits.push(p); }
-  hits.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  if (!hits.length) { res.append(h('p', { class: 'note', text: 'Nothing matches “' + q + '”.' })); return; }
-  res.append(h('p', { class: 'note', text: plural(hits.length, 'page') + ' found' }));
-  hits.slice(0, 40).forEach(p => {
-    const j = jById(p.j); if (!j) return;
-    const flat = p.text.replace(/\s+/g, ' '); const fi = flat.toLowerCase().indexOf(ql); const start = Math.max(0, fi - 40);
-    const snip = (start ? '…' : '') + flat.slice(start, start + 150); const span = h('span'); const si = snip.toLowerCase().indexOf(ql);
-    if (si >= 0) span.append(snip.slice(0, si), h('mark', { text: snip.slice(si, si + q.length) }), snip.slice(si + q.length)); else span.textContent = snip;
-    res.append(h('button', { type: 'button', class: 'res', onclick: () => openJournal(j.id, p.n) }, h('b', { text: j.title + ' · page ' + p.n + (p.date ? ' · ' + shortDate(p.date) : '') }), span));
-  });
+  const r = searchAll(q, 40);
+  if (!r.journals.length && !r.total) { res.append(h('p', { class: 'note', text: 'Nothing matches “' + q + '”. Every word has to appear; try fewer words.' })); return; }
+  r.journals.forEach(j => res.append(h('button', { type: 'button', class: 'res', onclick: () => openJournal(j.id) }, h('b', { text: 'Journal · ' + j.title }), h('span', { text: plural(countWritten(j.id), 'page') + ' written' }))));
+  if (r.total) res.append(h('p', { class: 'note', text: plural(r.total, 'page') + ' found' + (r.total > r.pages.length ? ', showing the newest ' + r.pages.length : '') }));
+  r.pages.forEach(p => { const j = jById(p.j); res.append(h('button', { type: 'button', class: 'res', onclick: () => openJournal(j.id, p.n) }, h('b', { text: j.title + ' · page ' + p.n + (p.date ? ' · ' + shortDate(p.date) : '') }), hitLine(p, q))); });
 }
 function dayInfo() {
   const m = new Map();
@@ -201,7 +197,11 @@ function tabSettings(body) {
 // nothing changes until the visitor confirms the replacement.
 function backupCard() {
   const card = h('div', { class: 'card', id: 'bkCard' }, h('h3', { text: 'Full backup' }),
-    h('p', { class: 'note', text: 'One file with every journal, page, photo, sticker, drawing, room preset and setting. Your PIN stays on this device. Keep it somewhere safe to bring Daybook back later or on another browser.' }));
+    h('p', { class: 'note', text: 'One file you keep, to bring Daybook back later or in another browser.' }),
+    h('ul', { class: 'bk-what' }, h('li', null, h('b', { text: 'Included: ' }), 'every journal and cover, every page (text, mood, stickers, tape, notes, photos and drawings), habits, tasks, review pages, room presets and settings.'),
+      h('li', null, h('b', { text: 'Not included: ' }), 'your PIN and its hint (they stay on this device), and writing that has not been saved yet.')));
+  const use = storageUse();
+  if (use) card.append(h('p', { class: 'note' + (use.mb > 4 ? ' bk-warn' : ''), id: 'bkSpace', text: 'Daybook uses about ' + use.mb.toFixed(1) + ' MB of this browser’s storage' + (use.mb > 4 ? '. Space is running low (browsers usually allow about 5 MB here): export a backup, then remove some photos.' : ' (browsers usually allow about 5 MB here).') }));
   const pick = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'aria-label': 'Choose a Daybook backup file', onchange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; pickBackup(f); } });
   card.append(pick, h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: exportBackup }, 'Export full backup'), h('button', { type: 'button', class: 'btn', onclick: () => pick.click() }, 'Restore from a backup…')));
   if (LB.restoreErr) card.append(h('p', { class: 'note bk-msg', role: 'alert', text: LB.restoreErr }));
@@ -212,7 +212,7 @@ function backupCard() {
     const box = h('div', { class: 'confirm', role: 'group', 'aria-label': 'Restore preview' },
       h('p', null, h('b', { text: 'Restore “' + r.name + '”?' })),
       h('p', { text: 'This backup' + when + ' holds ' + r.info.summary + '.' }),
-      h('p', { text: 'Restoring replaces everything Daybook holds on this device now (' + libSummary(state.lib.journals.length, now, photoIds(state.lib, now).size) + '). A copy of what is here now goes to your downloads first.' }));
+      h('p', { text: 'Restoring replaces everything Daybook holds on this device now (' + libSummary(state.lib.journals.length, now, photoIds(state.lib, now).size) + planSummary(state.lib) + '). A copy of what is here now goes to your downloads first.' }));
     if (r.info.missing) box.append(h('p', { class: 'note', text: plural(r.info.missing, 'photo') + ' the journals use ' + (r.info.missing > 1 ? 'are' : 'is') + ' not in this backup and will show as empty frames.' }));
     if (r.info.skipped) box.append(h('p', { class: 'note', text: plural(r.info.skipped, 'page') + ' in this backup belong' + (r.info.skipped > 1 ? '' : 's') + ' to no journal in it and will be left out.' }));
     box.append(h('div', { class: 'row' },
@@ -221,6 +221,11 @@ function backupCard() {
     card.append(box);
   }
   return card;
+}
+// how much of this browser's storage Daybook's own keys take (localStorage counts characters; this is an estimate)
+function storageUse() {
+  if (!state.store || state.store.kind !== 'local') return null;
+  try { let n = 0; for (const k of Object.keys(localStorage)) if (k.indexOf('daybook3d:') === 0) n += k.length + (localStorage.getItem(k) || '').length; return { mb: n / 1048576 }; } catch (e) { return null; }
 }
 function scrollBackup() { const c = $('#bkCard'); if (c) c.scrollIntoView({ block: 'nearest' }); }
 async function pickBackup(file) {
@@ -277,6 +282,8 @@ function showWelcome(force) {
   // a visitor who has already opened something does not need it popping up over that
   if (!force && (S().welcomed || RD.open || opening() || (R3 && (isOverlayActive() || R3.cam.mode !== 'room')))) return;
   $('#welcome .note').textContent = state.store && state.store.kind === 'cloud' ? 'Only you can read your journals. They are saved to your account as you write.' : 'Your journals stay in this browser on this device, and save as you write.';
+  // without the 3D room there is no shelf: journals open from the library
+  if (document.body.classList.contains('no3d')) { const first = $('#welcome li div'); first.querySelector('b').textContent = 'Open a journal'; first.querySelector('span').textContent = 'Pick one in the library. The 3D study needs a device and connection that can show it.'; }
   $('#welcome').hidden = false;
 }
 function hideWelcome() { $('#welcome').hidden = true; if (!S().welcomed) { state.lib.settings.welcomed = true; saveLib(); } }

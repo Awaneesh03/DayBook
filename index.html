@@ -354,7 +354,7 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; pa
 .room-pop-actions { display: flex; flex-direction: column; gap: 8px; }
 .room-pop-actions .btn { justify-content: flex-start; text-align: left; }
 .room-pop-actions .btn svg { width: 18px; height: 18px; flex: none; }
-.bk-msg { color: var(--danger); font-weight: 600; }   /* why a backup file was refused, or why a restore stopped */
+.bk-msg, .bk-warn { color: var(--danger); font-weight: 600; }   /* why a backup file was refused, or why a restore stopped */
 .room-pop.docked { left: 12px; right: 12px; top: auto; bottom: max(12px, env(safe-area-inset-bottom, 0px)); width: auto; }
 
 /* ---------- Room Customizer Modal & Presets ---------- */
@@ -748,6 +748,58 @@ body.reading .hud { visibility: hidden; }
 .page.is-end .corner { display: none !important; }
 .reader.drawing .corner { display: none !important; }
 
+/* ---------- Today tab: habits, tasks, reviews ---------- */
+.pl-day { display: flex; align-items: center; gap: 8px; }
+.pl-day b { flex: 1; text-align: center; font: 600 18px/1.2 var(--display); }
+.pl-habit, .pl-task, .pl-review { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.pl-tasks { list-style: none; margin: 0; padding: 0; }
+.pl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pl-main b { font-size: 14px; overflow-wrap: anywhere; }
+.pl-main small { color: var(--muted); font-size: 12px; }
+.pl-check { flex: none; width: 34px; height: 34px; border-radius: 10px; border: 2px solid var(--line); background: var(--panel); color: var(--on-accent); font-weight: 800; font-size: 16px; display: grid; place-items: center; cursor: pointer; }
+.pl-check[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+.pl-check:disabled { opacity: .35; cursor: default; }
+.pl-task.done .pl-main b { text-decoration: line-through; color: var(--muted); }
+.pl-strip { display: grid; grid-template-columns: repeat(14, 7px); gap: 2px; flex: none; }
+.pl-strip i { height: 14px; border-radius: 2px; background: var(--line); }
+.pl-strip i.done { background: var(--accent); }
+.pl-strip i.missed { background: transparent; box-shadow: inset 0 0 0 1px var(--muted); }
+.pl-strip i.open { background: transparent; box-shadow: inset 0 0 0 1.5px var(--accent); }
+.pl-strip i.off { opacity: .3; }
+.pl-link { border: 0; background: none; padding: 2px 0; color: var(--accent); font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; }
+.pl-add .inp { flex: 1; min-width: 0; }
+.pl-field { display: flex; flex-direction: column; gap: 4px; }
+.pl-edit .chips .chip { min-width: 40px; justify-content: center; }
+@media (max-width: 440px) { .pl-habit { flex-wrap: wrap; } .pl-strip { order: 5; flex: 0 0 calc(100% - 44px); margin-left: 44px; } }
+
+/* ---------- quick navigation ---------- */
+.modal.qn { place-items: start center; padding-top: max(10vh, 20px); z-index: 60; }
+.qn-panel { width: min(620px, 100%); max-height: min(72vh, 560px); grid-template-rows: auto minmax(0, 1fr) auto; padding: 12px; gap: 8px; }
+.qn-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.qn-item { padding: 8px 10px; border-radius: 10px; cursor: pointer; display: grid; grid-template-columns: 56px minmax(0, 1fr); column-gap: 10px; align-items: center; }
+.qn-item small { grid-row: span 2; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.qn-item b { font-size: 14px; }
+.qn-item span { grid-column: 2; font-size: 13px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.qn-item[aria-selected="true"] { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
+.qn-empty { padding: 12px; color: var(--muted); font-size: 13px; }
+.qn-foot { text-align: center; }
+
+/* ---------- focus writing: the page, a quiet word count, and a way out ---------- */
+#rFocusExit { display: none; }
+.reader.show.focus { background: rgba(12, 10, 16, .94); }
+.reader.focus #rFocusExit { display: inline-flex; }
+.reader.focus #rClose, .reader.focus .r-tools, .reader.focus #rCount, .reader.focus .ribbon, .reader.focus .p-tab, .reader.focus .corner { display: none; }
+.reader.focus .r-bottom .hb { opacity: .55; }
+.reader.focus .r-bottom .hb:hover, .reader.focus .r-bottom .hb:focus-visible { opacity: 1; }
+
+.bk-what { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.bk-what b { color: var(--ink); }
+
+/* ---------- unsaved writing found on load ---------- */
+.recover { width: min(560px, 100%); max-height: calc(100dvh - 32px); grid-template-rows: auto minmax(0, 1fr) auto; }
+.recover .w-body { padding: 12px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.rc-list { display: flex; flex-direction: column; gap: 10px; }
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 </style>
 
@@ -830,6 +882,7 @@ body.reading .hud { visibility: hidden; }
   <header class="m-head"><h2>Library</h2><button type="button" class="x" id="drClose" aria-label="Close library">&times;</button></header>
   <div class="dtabs" role="tablist">
     <button type="button" role="tab" data-dt="journals" aria-selected="true">Journals</button>
+    <button type="button" role="tab" data-dt="today" aria-selected="false">Today</button>
     <button type="button" role="tab" data-dt="calendar" aria-selected="false">Calendar</button>
     <button type="button" role="tab" data-dt="insights" aria-selected="false">Insights</button>
     <button type="button" role="tab" data-dt="settings" aria-selected="false">Settings</button>
@@ -841,6 +894,7 @@ body.reading .hud { visibility: hidden; }
 <div class="reader" id="reader" hidden role="dialog" aria-modal="true" aria-labelledby="rJournal">
   <div class="r-top">
     <button type="button" class="hb" id="rClose" title="Back to the room"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>Room</span></button>
+    <button type="button" class="hb" id="rFocusExit" title="Leave focus writing (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v4H5M15 4v4h4M9 20v-4H5M15 20v-4h4"/></svg><span>Exit focus</span></button>
     <div class="r-title"><b id="rJournal"></b><span id="rCount"></span></div>
     <div class="r-tools">
       <button type="button" class="hb" data-pop="pen" title="Pens and ink" aria-label="Pens and ink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3"/></svg><span>Pen</span></button>
@@ -849,6 +903,7 @@ body.reading .hud { visibility: hidden; }
       <button type="button" class="hb" id="rDraw" aria-pressed="false" title="Draw and highlight" aria-label="Draw"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21c3 0 4-2 4-4a3 3 0 0 1 3-3l9-9a2 2 0 0 0-3-3l-9 9a3 3 0 0 1-3 3"/></svg><span>Draw</span></button>
       <button type="button" class="hb" data-pop="tpl" title="Templates and prompts" aria-label="Templates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg><span>Templates</span></button>
       <button type="button" class="hb" data-pop="mark" title="Bookmarks" aria-label="Bookmarks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10v18l-5-4-5 4z"/></svg><span>Bookmarks</span></button>
+      <button type="button" class="hb" id="rFocus" aria-pressed="false" title="Focus writing: only the page" aria-label="Focus writing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/></svg><span>Focus</span></button>
       <button type="button" class="hb icon" data-pop="more" aria-label="More" title="More"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
     </div>
   </div>
@@ -1601,7 +1656,7 @@ const SETTINGS_DEFAULT = {
   showClock: true, clockMode: 'analog', clockStyle: 'daybook', clockSec: true, clockTick: false,
   weather: 'clear', woodFinish: 'satin', lampStyle: 'brass', artStyle: 'quiet_focus',
   potStyle: 'terracotta', globeStyle: 'brass', radioStyle: 'wood',
-  exploreSpeed: 1.0, activePreset: 'default', customPresets: {}, objectLayout: {},
+  exploreSpeed: 1.0, activePreset: 'default', customPresets: {}, objectLayout: {}, reviewJournal: '',
   visibleObjects: { globe: true, plant: true, radio: true, cup: true, mug: true, art: true, clock: true }
 };
 
@@ -1636,7 +1691,37 @@ function normLib(L) {
   if (typeof settings.visibleObjects !== 'object' || settings.visibleObjects === null) {
     settings.visibleObjects = Object.assign({}, SETTINGS_DEFAULT.visibleObjects);
   }
-  return { v: 4, journals: (L.journals || []).map(normJ), activeId: L.activeId || null, settings };
+  return { v: 4, journals: (L.journals || []).map(normJ), activeId: L.activeId || null, settings, habits: normHabits(L.habits), tasks: normTasks(L.tasks), reviews: normReviews(L.reviews) };
+}
+// Habits, tasks and the review pages live in the library beside the journals, so saving, other tabs and backups carry
+// them like everything else. Stored data and backups can hold anything: keep only well-formed entries.
+const PLAN_ID = /^[\w-]{1,40}$/, DAY_ID = /^\d{4}-\d{2}-\d{2}$/;
+const isRec = v => !!v && typeof v === 'object' && !Array.isArray(v);
+const cut = (v, max) => typeof v === 'string' ? v.slice(0, max) : '';
+function normHabits(v) {
+  const out = [];
+  (Array.isArray(v) ? v : []).forEach(x => {
+    if (!isRec(x) || !PLAN_ID.test(x.id) || out.some(o => o.id === x.id) || out.length >= 50) return;
+    const days = Array.isArray(x.days) ? Array.from(new Set(x.days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6))).sort() : [];
+    const done = {}; if (isRec(x.done)) Object.keys(x.done).forEach(k => { if (DAY_ID.test(k) && x.done[k] === true) done[k] = true; });
+    out.push({ id: x.id, name: cut(x.name, 60).trim() || 'Habit', days: days.length ? days : [0, 1, 2, 3, 4, 5, 6], start: DAY_ID.test(x.start) ? x.start : '', done });
+  });
+  return out;
+}
+function normTasks(v) {
+  const out = [], ids = new Set();
+  (Array.isArray(v) ? v : []).forEach(x => {
+    if (!isRec(x) || !PLAN_ID.test(x.id) || ids.has(x.id) || !DAY_ID.test(x.date) || !cut(x.text, 200).trim() || out.length >= 5000) return;
+    ids.add(x.id);
+    const link = isRec(x.link) && /^[\w-]{1,64}$/.test(x.link.j) && Number.isInteger(x.link.n) && x.link.n >= 1 && x.link.n <= 999 ? { j: x.link.j, n: x.link.n } : null;
+    out.push({ id: x.id, text: cut(x.text, 200).trim(), date: x.date, done: x.done === true, created: +x.created || 0, link, from: DAY_ID.test(x.from) ? x.from : '' });
+  });
+  return out;
+}
+function normReviews(v) {
+  const out = {};
+  if (isRec(v)) Object.keys(v).forEach(k => { const r = v[k]; if (/^(daily|weekly):\d{4}-\d{2}-\d{2}$/.test(k) && isRec(r) && /^[\w-]{1,64}$/.test(r.j) && Number.isInteger(r.n) && r.n >= 1 && r.n <= 999) out[k] = { j: r.j, n: r.n }; });
+  return out;
 }
 function defaultLib() {
   const yr = String(new Date().getFullYear());
@@ -1767,8 +1852,11 @@ function importLegacy(lib, pages, legacy) {
   return keys;
 }
 
-let libTimer = null, libInflight = 0, chain = Promise.resolve(), saveErrShown = false;
+let libTimer = null, libInflight = 0, libFailed = false, chain = Promise.resolve(), saveErrShown = false;
 function setSaveState(t) { const el = $('#rStatus'); if (el) el.textContent = t; }
+// "Saved" only once nothing is waiting and nothing failed: one page saving must not hide another that could not be stored
+function refreshSaveState() { if (pageTimers.size || libTimer || libInflight) setSaveState('Saving…'); else if (dirtyPages.size || libFailed) setSaveState('Not saved yet'); else setSaveState('Saved'); }
+const unsaved = () => dirtyPages.size > 0 || libFailed;
 function queue(fn) {
   chain = chain.then(fn).catch(e => {
     setSaveState('Not saved yet');
@@ -1784,7 +1872,10 @@ function restoredElsewhere() {
 function saveLib(now) {
   clearTimeout(libTimer);
   if (state.restoring) return;   // a restored backup is being written; the old state must not be saved over it
-  const run = () => { libTimer = null; libInflight++; const snap = clone(state.lib); return queue(() => state.store.writeLib(snap)).then(() => { libInflight--; }); };
+  const run = () => {
+    libTimer = null; libInflight++; const snap = clone(state.lib);
+    return queue(async () => { try { await state.store.writeLib(snap); libFailed = false; } catch (e) { libFailed = true; throw e; } }).then(() => { libInflight--; refreshSaveState(); });
+  };
   if (now) return run();
   libTimer = setTimeout(run, 350);
 }
@@ -1793,7 +1884,7 @@ function pageIsEmpty(p) { return !p || (!(p.text || '').trim() && !p.mood && !p.
 function savePage(key, now) {
   if (state.restoring) return;
   dirtyPages.add(key); editSeq.set(key, (editSeq.get(key) || 0) + 1);
-  setSaveState('Saving…');
+  setSaveState('Saving…'); keepDraft(key);
   clearTimeout(pageTimers.get(key));
   if (now) return flushPage(key);
   pageTimers.set(key, setTimeout(() => flushPage(key), 700));
@@ -1809,11 +1900,43 @@ function flushPage(key) {
   if (empty) state.pages.delete(key);
   return queue(async () => {
     await state.store.writePage(key, data);
-    if (editSeq.get(key) === seq) dirtyPages.delete(key);
-    if (!pageTimers.size) setSaveState('Saved');
+    if (data) savedAt.set(key, data.updatedAt || 0); else savedAt.delete(key);
+    if (editSeq.get(key) === seq) { dirtyPages.delete(key); dropDraft(key); }
+    refreshSaveState();
   });
 }
-function flushAll() { for (const k of Array.from(pageTimers.keys())) flushPage(k); if (libTimer) saveLib(true); return chain; }
+// everything waiting, and everything that failed before (it is tried again rather than left until the next change)
+function flushAll() { for (const k of new Set([...pageTimers.keys(), ...dirtyPages])) flushPage(k); if (libTimer || libFailed) saveLib(true); return chain; }
+
+/* ---- drafts: unsaved writing kept per tab, so a failed save or a crash does not lose it ---- */
+// sessionStorage: it survives a reload of this tab, has its own room when localStorage is full, and other tabs cannot
+// see it (they would otherwise offer to "recover" text this tab is still typing). Text, date and mood only.
+const DRAFT = 'daybook3d:draft:', savedAt = new Map(), draftTimers = new Map();
+const draftStore = () => { try { return window.sessionStorage; } catch (e) { return null; } };
+function keepDraft(key) {
+  clearTimeout(draftTimers.get(key));
+  draftTimers.set(key, setTimeout(() => {
+    draftTimers.delete(key); const p = state.pages.get(key), s = draftStore(); if (!s || !dirtyPages.has(key)) return;
+    try { s.setItem(DRAFT + key, JSON.stringify({ text: p ? p.text || '' : '', date: p ? p.date || '' : '', mood: p ? p.mood || 0 : 0, base: savedAt.get(key) || 0, at: Date.now() })); } catch (e) { /* no room: the page itself may still save */ }
+  }, 250));
+}
+function dropDraft(key) { clearTimeout(draftTimers.get(key)); draftTimers.delete(key); const s = draftStore(); try { if (s) s.removeItem(DRAFT + key); } catch (e) { /* ignore */ } }
+function dropAllDrafts() { const s = draftStore(); try { if (s) Object.keys(s).filter(k => k.indexOf(DRAFT) === 0).forEach(k => s.removeItem(k)); } catch (e) { /* ignore */ } }
+// drafts left by an earlier load of this tab whose writing never reached storage; ones already saved are dropped quietly
+function pendingDrafts() {
+  const s = draftStore(), out = []; if (!s) return out;
+  let keys = []; try { keys = Object.keys(s).filter(k => k.indexOf(DRAFT) === 0); } catch (e) { return out; }
+  for (const k of keys) {
+    const key = k.slice(DRAFT.length), m = /^([\w-]{1,64})~(\d{1,3})$/.exec(key); let d = null;
+    try { d = JSON.parse(s.getItem(k)); } catch (e) { /* unreadable */ }
+    if (!m || !d || typeof d.text !== 'string') { dropDraft(key); continue; }
+    const p = state.pages.get(key);
+    if (p && (p.text || '') === d.text) { dropDraft(key); continue; }   // it did get saved
+    if (!p && !d.text.trim()) { dropDraft(key); continue; }
+    out.push({ key, j: m[1], n: +m[2], draft: d, saved: p || null, conflict: (p ? p.updatedAt || 0 : 0) !== (d.base || 0) });
+  }
+  return out;
+}
 
 function onRemoteLib(data) {
   if (libTimer || libInflight) return;
@@ -1822,7 +1945,7 @@ function onRemoteLib(data) {
 }
 function onRemotePages(m) {
   const seen = new Set(Object.keys(m));
-  for (const k of seen) { if (!dirtyPages.has(k)) state.pages.set(k, clone(m[k])); }
+  for (const k of seen) { if (!dirtyPages.has(k)) { state.pages.set(k, clone(m[k])); savedAt.set(k, m[k].updatedAt || 0); } }
   for (const k of Array.from(state.pages.keys())) { if (!seen.has(k) && !dirtyPages.has(k)) state.pages.delete(k); }
   refreshOpenUI();
 }
@@ -4562,6 +4685,7 @@ function closeReader() {
   if (!RD.open) return;
   flushAll();
   const j = curJ(); if (j && j.last !== RD.n) { j.last = RD.n; saveLib(); }
+  if (RD.focusMode) { RD.focusMode = false; $('#reader').classList.remove('focus'); $('#rFocus').setAttribute('aria-pressed', 'false'); }
   RD.open = false; RD.closing = true; closePop(); if (RD.drawing) toggleDraw(false); RD.sel = null;
   clearTimeout(RD.flapT); // the opening's tidy-up would hide the cover partway through this close; finish() tidies up instead
   pageEls.forEach(el => { el._pen.classList.remove('on'); });
@@ -4940,6 +5064,8 @@ function photoIds(lib, pages) {
   Object.values(pages).forEach(p => (p.items || []).forEach(it => { if (it && it.mid) s.add(it.mid); }));
   return s;
 }
+// habits and tasks, when there are any, for the restore preview
+const planSummary = lib => (lib.habits || []).length || (lib.tasks || []).length ? ', plus ' + plural((lib.habits || []).length, 'habit') + ' and ' + plural((lib.tasks || []).length, 'task') : '';
 function libSummary(journals, pages, photos) {
   const written = Object.values(pages).filter(p => (p.text || '').trim() || (p.items || []).length || (p.ink || []).length);
   return plural(journals, 'journal') + ', ' + plural(written.length, 'written page') + ', ' + plural(written.reduce((a, p) => a + countWords(p.text), 0), 'word') + ' and ' + plural(photos, 'photo');
@@ -4999,7 +5125,7 @@ function checkBackup(text) {
   lib.journals.forEach(j => { j.pages = Math.min(j.pages, MAX_PAGES); Object.values(pages).forEach(p => { if (p.j === j.id && p.n > j.pages) j.pages = p.n; }); });
   if (lib.activeId && !ids.has(lib.activeId)) lib.activeId = null;
   const created = new Date(d.createdAt);
-  return { lib, pages, media, info: { created: isNaN(created) ? null : created, summary: libSummary(lib.journals.length, pages, Object.keys(media).length), missing: [...want].filter(m => !media[m]).length, skipped } };
+  return { lib, pages, media, info: { created: isNaN(created) ? null : created, summary: libSummary(lib.journals.length, pages, Object.keys(media).length) + planSummary(lib), missing: [...want].filter(m => !media[m]).length, skipped } };
 }
 // Full replacement, once the visitor has confirmed it: a safety copy of what is here goes to their downloads first,
 // then everything is written in one go (put back as it was if any write fails) and the page reloads into the backup.
@@ -5020,6 +5146,7 @@ async function restoreBackup(b) {
   }
   // in this browser, success is only claimed by the reloaded page, once it finds this restore still stored (checkRestored)
   try { if (mark) sessionStorage.setItem(RESTORE_CHECK, mark); } catch (e) { mark = null; }
+  dropAllDrafts();   // unsaved writing kept for the replaced journals no longer belongs to anything here
   toast(mark ? 'Opening the restored backup…' : 'Backup restored. Opening it now…'); setTimeout(() => location.reload(), 700);
 }
 const RESTORE_CHECK = 'daybook3d:restore-check';
@@ -5290,10 +5417,11 @@ function saveDesigner() {
 const LB = { tab: 'journals', calY: new Date().getFullYear(), calM: new Date().getMonth(), calSel: null, pinStep: null };
 function openDrawer(tab) { if (isLocked()) return; closeSoundPop(); hideMemory(); const dr = $('#drawer'); if (tab) LB.tab = tab; dr.hidden = false; renderDrawer(); requestAnimationFrame(() => dr.classList.add('open')); fadeHint(); }
 function closeDrawer() { if (document.body.classList.contains('no3d')) return; const dr = $('#drawer'); dr.classList.remove('open'); setTimeout(() => { if (!dr.classList.contains('open')) dr.hidden = true; }, 450); }
-function renderDrawerSoft() { if (LB.tab === 'journals') { renderJournalList(); renderSearch(); } else if (LB.tab !== 'settings') renderDrawer(); }
+// (not under a field being typed in: a save from another tab must not wipe a half-typed task or habit)
+function renderDrawerSoft() { const a = document.activeElement; if (a && a.closest && a.closest('#drBody') && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && a.id !== 'drSearch') return; if (LB.tab === 'journals') { renderJournalList(); renderSearch(); } else if (LB.tab !== 'settings') renderDrawer(); }
 function renderDrawer() {
   if (!state.lib) return;
-  const tabs = { journals: tabJournals, calendar: tabCalendar, insights: tabInsights, settings: tabSettings };
+  const tabs = { journals: tabJournals, today: tabToday, calendar: tabCalendar, insights: tabInsights, settings: tabSettings };
   if (!tabs[LB.tab]) LB.tab = 'journals';   // the shelf and the pen cup ask for 'library', which is not a tab
   $$('.dtabs [data-dt]').forEach(b => b.setAttribute('aria-selected', b.dataset.dt === LB.tab ? 'true' : 'false'));
   const body = $('#drBody'); body.textContent = ''; body.scrollTop = 0;
@@ -5320,12 +5448,14 @@ function tabJournals(body) {
   const pagesW = writtenPages().length;
   body.append(h('div', { class: 'stats' }, [[state.lib.journals.length, 'journals'], [pagesW, 'pages'], [totalWords(), 'words'], [currentStreak(), 'day streak']].map(([v, l]) => h('div', { class: 'stat' }, h('b', { text: v.toLocaleString() }), h('span', { text: l })))));
   const q = h('input', { class: 'search', id: 'drSearch', type: 'search', placeholder: 'Search every journal or #tag', autocomplete: 'off', 'aria-label': 'Search every journal' });
-  q.value = LB.q || ''; q.addEventListener('input', () => { LB.q = q.value; renderSearch(); });
+  // a short pause before searching a large library, so typing stays smooth
+  q.value = LB.q || ''; q.addEventListener('input', () => { LB.q = q.value; clearTimeout(LB.qt); if (state.pages.size > 1500) LB.qt = setTimeout(renderSearch, 120); else renderSearch(); });
   body.append(q);
   const tags = topTags(10);
   if (tags.length) body.append(h('div', { class: 'tags' }, tags.map(([t, c]) => h('button', { type: 'button', class: 'chip', onclick: () => { q.value = t; LB.q = t; renderSearch(); } }, t + ' ', h('small', { text: String(c), style: 'opacity:.6' })))));
   body.append(h('div', { class: 'results', id: 'drResults' }), h('ul', { class: 'jl', id: 'drList' }));
   body.append(h('button', { type: 'button', class: 'btn accent', onclick: () => openDesigner(null) }, '+ Design a new journal'));
+  if (!(R3 && R3.mobile)) body.append(h('p', { class: 'note', text: 'Tip: press ' + (/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl+K') + ' anywhere to jump to a journal, a page or any action.' }));
   body.append(h('p', { class: 'note', text: state.store && state.store.kind === 'cloud' ? 'Saved to your account. Only you can read your journals, even if you share this page.' : window.claude ? 'Saved in this browser only. Open Daybook in Claude while signed in to keep journals on your account.' : 'Saved in this browser on this device only. Clearing your browsing data erases it, so save a copy now and then (Settings).' }));
   renderJournalList(); renderSearch();
 }
@@ -5347,18 +5477,11 @@ function renderSearch() {
   const res = $('#drResults'); if (!res) return; res.textContent = '';
   const q = (LB.q || '').trim(); const list = $('#drList'); if (list) list.hidden = !!q;
   if (!q) return;
-  const ql = q.toLowerCase(); const hits = [];
-  for (const p of state.pages.values()) { if ((p.text || '').toLowerCase().indexOf(ql) >= 0) hits.push(p); }
-  hits.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  if (!hits.length) { res.append(h('p', { class: 'note', text: 'Nothing matches “' + q + '”.' })); return; }
-  res.append(h('p', { class: 'note', text: plural(hits.length, 'page') + ' found' }));
-  hits.slice(0, 40).forEach(p => {
-    const j = jById(p.j); if (!j) return;
-    const flat = p.text.replace(/\s+/g, ' '); const fi = flat.toLowerCase().indexOf(ql); const start = Math.max(0, fi - 40);
-    const snip = (start ? '…' : '') + flat.slice(start, start + 150); const span = h('span'); const si = snip.toLowerCase().indexOf(ql);
-    if (si >= 0) span.append(snip.slice(0, si), h('mark', { text: snip.slice(si, si + q.length) }), snip.slice(si + q.length)); else span.textContent = snip;
-    res.append(h('button', { type: 'button', class: 'res', onclick: () => openJournal(j.id, p.n) }, h('b', { text: j.title + ' · page ' + p.n + (p.date ? ' · ' + shortDate(p.date) : '') }), span));
-  });
+  const r = searchAll(q, 40);
+  if (!r.journals.length && !r.total) { res.append(h('p', { class: 'note', text: 'Nothing matches “' + q + '”. Every word has to appear; try fewer words.' })); return; }
+  r.journals.forEach(j => res.append(h('button', { type: 'button', class: 'res', onclick: () => openJournal(j.id) }, h('b', { text: 'Journal · ' + j.title }), h('span', { text: plural(countWritten(j.id), 'page') + ' written' }))));
+  if (r.total) res.append(h('p', { class: 'note', text: plural(r.total, 'page') + ' found' + (r.total > r.pages.length ? ', showing the newest ' + r.pages.length : '') }));
+  r.pages.forEach(p => { const j = jById(p.j); res.append(h('button', { type: 'button', class: 'res', onclick: () => openJournal(j.id, p.n) }, h('b', { text: j.title + ' · page ' + p.n + (p.date ? ' · ' + shortDate(p.date) : '') }), hitLine(p, q))); });
 }
 function dayInfo() {
   const m = new Map();
@@ -5487,7 +5610,11 @@ function tabSettings(body) {
 // nothing changes until the visitor confirms the replacement.
 function backupCard() {
   const card = h('div', { class: 'card', id: 'bkCard' }, h('h3', { text: 'Full backup' }),
-    h('p', { class: 'note', text: 'One file with every journal, page, photo, sticker, drawing, room preset and setting. Your PIN stays on this device. Keep it somewhere safe to bring Daybook back later or on another browser.' }));
+    h('p', { class: 'note', text: 'One file you keep, to bring Daybook back later or in another browser.' }),
+    h('ul', { class: 'bk-what' }, h('li', null, h('b', { text: 'Included: ' }), 'every journal and cover, every page (text, mood, stickers, tape, notes, photos and drawings), habits, tasks, review pages, room presets and settings.'),
+      h('li', null, h('b', { text: 'Not included: ' }), 'your PIN and its hint (they stay on this device), and writing that has not been saved yet.')));
+  const use = storageUse();
+  if (use) card.append(h('p', { class: 'note' + (use.mb > 4 ? ' bk-warn' : ''), id: 'bkSpace', text: 'Daybook uses about ' + use.mb.toFixed(1) + ' MB of this browser’s storage' + (use.mb > 4 ? '. Space is running low (browsers usually allow about 5 MB here): export a backup, then remove some photos.' : ' (browsers usually allow about 5 MB here).') }));
   const pick = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'aria-label': 'Choose a Daybook backup file', onchange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; pickBackup(f); } });
   card.append(pick, h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: exportBackup }, 'Export full backup'), h('button', { type: 'button', class: 'btn', onclick: () => pick.click() }, 'Restore from a backup…')));
   if (LB.restoreErr) card.append(h('p', { class: 'note bk-msg', role: 'alert', text: LB.restoreErr }));
@@ -5498,7 +5625,7 @@ function backupCard() {
     const box = h('div', { class: 'confirm', role: 'group', 'aria-label': 'Restore preview' },
       h('p', null, h('b', { text: 'Restore “' + r.name + '”?' })),
       h('p', { text: 'This backup' + when + ' holds ' + r.info.summary + '.' }),
-      h('p', { text: 'Restoring replaces everything Daybook holds on this device now (' + libSummary(state.lib.journals.length, now, photoIds(state.lib, now).size) + '). A copy of what is here now goes to your downloads first.' }));
+      h('p', { text: 'Restoring replaces everything Daybook holds on this device now (' + libSummary(state.lib.journals.length, now, photoIds(state.lib, now).size) + planSummary(state.lib) + '). A copy of what is here now goes to your downloads first.' }));
     if (r.info.missing) box.append(h('p', { class: 'note', text: plural(r.info.missing, 'photo') + ' the journals use ' + (r.info.missing > 1 ? 'are' : 'is') + ' not in this backup and will show as empty frames.' }));
     if (r.info.skipped) box.append(h('p', { class: 'note', text: plural(r.info.skipped, 'page') + ' in this backup belong' + (r.info.skipped > 1 ? '' : 's') + ' to no journal in it and will be left out.' }));
     box.append(h('div', { class: 'row' },
@@ -5507,6 +5634,11 @@ function backupCard() {
     card.append(box);
   }
   return card;
+}
+// how much of this browser's storage Daybook's own keys take (localStorage counts characters; this is an estimate)
+function storageUse() {
+  if (!state.store || state.store.kind !== 'local') return null;
+  try { let n = 0; for (const k of Object.keys(localStorage)) if (k.indexOf('daybook3d:') === 0) n += k.length + (localStorage.getItem(k) || '').length; return { mb: n / 1048576 }; } catch (e) { return null; }
 }
 function scrollBackup() { const c = $('#bkCard'); if (c) c.scrollIntoView({ block: 'nearest' }); }
 async function pickBackup(file) {
@@ -5563,6 +5695,8 @@ function showWelcome(force) {
   // a visitor who has already opened something does not need it popping up over that
   if (!force && (S().welcomed || RD.open || opening() || (R3 && (isOverlayActive() || R3.cam.mode !== 'room')))) return;
   $('#welcome .note').textContent = state.store && state.store.kind === 'cloud' ? 'Only you can read your journals. They are saved to your account as you write.' : 'Your journals stay in this browser on this device, and save as you write.';
+  // without the 3D room there is no shelf: journals open from the library
+  if (document.body.classList.contains('no3d')) { const first = $('#welcome li div'); first.querySelector('b').textContent = 'Open a journal'; first.querySelector('span').textContent = 'Pick one in the library. The 3D study needs a device and connection that can show it.'; }
   $('#welcome').hidden = false;
 }
 function hideWelcome() { $('#welcome').hidden = true; if (!S().welcomed) { state.lib.settings.welcomed = true; saveLib(); } }
@@ -5918,6 +6052,393 @@ function applyRoomStyle() {
 }
 
 /* =====================================================================
+   Finding and planning: search, quick navigation, focus writing, the
+   Today tab (habits, tasks, reviews), and recovering unsaved writing
+   ===================================================================== */
+
+/* ---- search ---- */
+// Text folded for matching: lower case and without accents (café finds cafe), with where each folded character came
+// from, so a match can be marked in the original. Plain ASCII text is the common case and skips the per-character work.
+function fold(s) {
+  s = s || '';
+  if (!/[^\x00-\x7f]/.test(s)) return { f: s.toLowerCase(), map: null };
+  let f = ''; const map = [];
+  for (let i = 0; i < s.length;) {
+    const ch = String.fromCodePoint(s.codePointAt(i)), g = ch.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+    for (let k = 0; k < g.length; k++) map.push(i);
+    f += g; i += ch.length;
+  }
+  map.push(s.length);
+  return { f, map };
+}
+// folded page text, kept until the text (or date) changes
+const foldCache = new WeakMap();
+function foldedPage(p) {
+  let c = foldCache.get(p);
+  if (!c || c.text !== p.text || c.date !== p.date) { c = { text: p.text, date: p.date, ...fold(p.text), meta: p.date ? fold(p.date + ' ' + longDate(p.date)).f : '' }; foldCache.set(p, c); }
+  return c;
+}
+const searchTerms = q => fold((q || '').trim()).f.split(/\s+/).filter(Boolean);
+// Every word must appear, in the page's text or its date ("trip october"). Journals match on their title.
+function searchAll(q, limit) {
+  const ts = searchTerms(q); if (!ts.length) return { journals: [], pages: [], total: 0 };
+  const journals = state.lib.journals.filter(j => { const t = fold(j.title + ' ' + (j.subtitle || '')).f; return ts.every(x => t.includes(x)); });
+  const hits = [];
+  for (const p of state.pages.values()) {
+    if (!(p.text || '').trim() || !jById(p.j)) continue;
+    const c = foldedPage(p);
+    if (ts.every(x => c.f.includes(x) || c.meta.includes(x))) hits.push(p);
+  }
+  hits.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (a.j < b.j ? -1 : a.j > b.j ? 1 : a.n - b.n));
+  return { journals, pages: hits.slice(0, limit || 40), total: hits.length };
+}
+// the words around the first match, split so the match can be marked without ever parsing the text as HTML
+function snippet(p, q) {
+  const c = foldedPage(p), text = p.text, clean = x => x.replace(/\s+/g, ' ');
+  let at = -1, len = 0;
+  for (const t of searchTerms(q)) { const i = c.f.indexOf(t); if (i >= 0 && (at < 0 || i < at)) { at = i; len = t.length; } }
+  if (at < 0) return { before: clean(text).slice(0, 150), hit: '', after: '' };
+  const s = c.map ? c.map[at] : at, e = c.map ? c.map[at + len] : at + len;
+  let from = Math.max(0, s - 50); if (from) { const sp = text.indexOf(' ', from); if (sp >= 0 && sp < s) from = sp + 1; }   // start on a whole word
+  return { before: (from ? '…' : '') + clean(text.slice(from, s)).replace(/^\s/, ''), hit: clean(text.slice(s, e)), after: clean(text.slice(e, e + 110)) + (e + 110 < text.length ? '…' : '') };
+}
+const hitLine = (p, q) => { const s = snippet(p, q); return h('span', null, s.before, s.hit ? h('mark', { text: s.hit }) : null, s.after); };
+
+/* ---- shared bits for the dialogs below ---- */
+// keeps Tab inside a dialog, and gives focus back to what had it when the dialog closes
+function trapFocus(box, e) {
+  if (e.key !== 'Tab') return;
+  const f = [...box.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled && x.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+const giveFocusBack = el => { if (el && el.isConnected && el.offsetParent !== null && typeof el.focus === 'function') el.focus({ preventScroll: true }); };
+// Dialogs and panels take focus when they appear and give it back when they go, so keyboard users are never left behind
+// them in the room; modal dialogs also keep Tab inside. (The lock screen handles its own keys.)
+const focusables = box => [...box.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled && x.offsetParent !== null);
+function watchFocus(el, modal) {
+  let back = null, open = !el.hidden;
+  new MutationObserver(() => {
+    if (!el.hidden && !open) {
+      open = true; back = document.activeElement;
+      setTimeout(() => { if (!el.hidden && !el.contains(document.activeElement)) { const f = el.querySelector('[role=tab][aria-selected="true"]') || focusables(el)[0]; if (f) f.focus({ preventScroll: true }); } }, 0);   // once it is laid out
+    } else if (el.hidden && open) { open = false; if (!document.activeElement || document.activeElement === document.body || el.contains(document.activeElement)) giveFocusBack(back); back = null; }
+  }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
+  if (modal) el.addEventListener('keydown', e => trapFocus(el, e));
+}
+function watchDialogs() { ['#designer', '#roomCustomModal', '#welcome'].forEach(s => { const m = $(s); if (m) watchFocus(m, true); }); ['#drawer', '#soundPop'].forEach(s => { const m = $(s); if (m) watchFocus(m, false); }); }
+// room-level panels sit under the reader, so the reader (and the cover studio) close first
+function toRoom() { if (!$('#designer').hidden) closeDesigner(); if (RD.open) closeReader(); }
+
+/* ---- quick navigation (Cmd+K / Ctrl+K) ---- */
+const QN = { el: null, sel: 0, items: [], opener: null };
+function qnActions() {
+  const A = (label, keys, run, ok = true) => ok ? { kind: 'action', label, keys, run } : null;
+  const room = !!R3;
+  return [
+    A('Write today', 'journal page new entry', writeToday),
+    RD.open && !RD.focusMode ? A('Focus writing', 'distraction free zen full screen', () => setFocusMode(true)) : null,
+    RD.open && RD.focusMode ? A('Leave focus writing', 'exit', () => setFocusMode(false)) : null,
+    RD.open ? A('Back to the room', 'close journal reader', closeReader) : null,
+    A('Search every journal', 'find text tag', () => { toRoom(); openDrawer('journals'); setTimeout(() => { const s = $('#drSearch'); if (s) s.focus(); }, 60); }),
+    A('Today: habits and tasks', 'planner todo to-do checklist streak', () => { toRoom(); openDrawer('today'); }),
+    A('Start today’s review', 'daily review reflection', () => startReview('daily', todayId())),
+    A('Start this week’s review', 'weekly review reflection', () => startReview('weekly', todayId())),
+    A('Library', 'journals list shelf', () => { toRoom(); openDrawer('journals'); }),
+    A('Calendar', 'days month', () => { toRoom(); openDrawer('calendar'); }),
+    A('Insights', 'stats statistics mood badges heatmap', () => { toRoom(); openDrawer('insights'); }),
+    A('Settings', 'preferences options goal', () => { toRoom(); openDrawer('settings'); }),
+    A('Full backup and restore', 'export import json safety copy', () => { toRoom(); openDrawer('settings'); setTimeout(scrollBackup, 60); }),
+    A('Design a new journal', 'cover studio create', () => { if (RD.open) closeReader(); openDesigner(null); }),
+    A('Customize the room', 'walls presets furniture lighting', () => { toRoom(); openRoomCustom('presets'); }, room),
+    A('Room tour', 'guided tour', () => { toRoom(); startRoomTour(0); }, room),
+    A('Look outside', 'window view sky peek', () => { toRoom(); lookOutside(); }, room),
+    A('Explore the room', 'free walk move camera', () => { toRoom(); startFreeExplore(); }, room),
+    A('Desk lamp on or off', 'light', toggleLamp, room),
+    A('Day or night', 'sky dark light', toggleSky, room),
+    A('Sounds', 'ambience rain music volume', () => { toRoom(); openSoundPop(); }),
+    A('Lock now', 'pin privacy', showLock, !!S().pinHash)
+  ].filter(Boolean);
+}
+function qnResults(q) {
+  const ts = searchTerms(q), match = s => ts.every(t => fold(s).f.includes(t));
+  const acts = qnActions().filter(a => !ts.length || match(a.label + ' ' + a.keys));
+  const journals = state.lib.journals.slice().sort((a, b) => a.order - b.order).filter(j => !ts.length || match(j.title + ' ' + (j.subtitle || '') + ' journal open'))
+    .map(j => ({ kind: 'journal', label: 'Open ' + j.title, run: () => openJournal(j.id) }));
+  const pages = q.trim().length >= 2 ? searchAll(q, 8).pages.map(p => ({ kind: 'page', label: jById(p.j).title + ' · page ' + p.n + (p.date ? ' · ' + shortDate(p.date) : ''), p, run: () => openJournal(p.j, p.n) })) : [];
+  return [...acts.slice(0, ts.length ? 8 : 6), ...journals.slice(0, 6), ...pages];
+}
+function openQuickNav() {
+  if (isLocked() || QN.el) return;
+  QN.opener = document.activeElement; QN.sel = 0;
+  const inp = h('input', { id: 'qnIn', class: 'search', type: 'text', autocomplete: 'off', spellcheck: 'false', role: 'combobox', 'aria-expanded': 'true', 'aria-controls': 'qnList', 'aria-autocomplete': 'list', 'aria-label': 'Go to a journal, page or action', placeholder: 'Go to a journal, page or action…' });
+  const list = h('ul', { id: 'qnList', class: 'qn-list', role: 'listbox', 'aria-label': 'Results' });
+  const box = h('div', { class: 'modal qn', id: 'qnav', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Quick navigation', onclick: e => { if (e.target.id === 'qnav') closeQuickNav(); } },
+    h('div', { class: 'panel qn-panel' }, inp, list, h('p', { class: 'qn-foot note', text: '↑ ↓ to choose · Enter to open · Esc to close' })));
+  QN.el = box; document.body.append(box);
+  const render = () => {
+    QN.items = qnResults(inp.value); list.textContent = '';
+    if (!QN.items.length) list.append(h('li', { class: 'qn-empty', text: 'Nothing matches “' + inp.value.trim() + '”.' }));
+    QN.items.forEach((it, i) => list.append(h('li', { id: 'qn' + i, role: 'option', class: 'qn-item', 'aria-selected': i === QN.sel ? 'true' : 'false', onmousemove: () => { if (QN.sel !== i) { QN.sel = i; mark(); } }, onclick: () => runQuickNav(i) },
+      h('small', { text: it.kind === 'action' ? 'Action' : it.kind === 'journal' ? 'Journal' : 'Page' }), h('b', { text: it.label }), it.p ? hitLine(it.p, inp.value) : null)));
+    mark();
+  };
+  const mark = () => { [...list.children].forEach((li, i) => li.setAttribute('aria-selected', i === QN.sel ? 'true' : 'false')); const cur = list.children[QN.sel]; if (cur && QN.items.length) { inp.setAttribute('aria-activedescendant', cur.id); cur.scrollIntoView({ block: 'nearest' }); } else inp.removeAttribute('aria-activedescendant'); };
+  inp.addEventListener('input', () => { QN.sel = 0; render(); });
+  box.addEventListener('keydown', e => {
+    e.stopPropagation();   // the room's keys (and Escape closing the reader) must not act under the palette
+    if (e.key === 'Escape') { e.preventDefault(); closeQuickNav(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (QN.items.length) { QN.sel = (QN.sel + (e.key === 'ArrowDown' ? 1 : -1) + QN.items.length) % QN.items.length; mark(); } }
+    else if (e.key === 'Enter') { e.preventDefault(); if (QN.items.length) runQuickNav(QN.sel); }
+    else if (e.key === 'Tab') e.preventDefault();   // one field: Tab would only leave the dialog
+    else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); closeQuickNav(); }
+  });
+  render(); inp.focus();
+}
+function closeQuickNav(keepFocus) { if (!QN.el) return; QN.el.remove(); QN.el = null; if (!keepFocus) giveFocusBack(QN.opener); QN.opener = null; }
+function runQuickNav(i) { const it = QN.items[i]; if (!it) return; closeQuickNav(true); it.run(); }
+
+/* ---- focus writing ---- */
+// The same reader and pages with everything but the writing put away: no tools, no room behind, a quiet word count.
+function setFocusMode(on) {
+  on = !!on && RD.open;
+  RD.focusMode = on; $('#reader').classList.toggle('focus', on);
+  $('#rFocus').setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (on) { closePop(); if (RD.drawing) toggleDraw(false); $('#rFocusExit').focus({ preventScroll: true }); const el = focusEl(); if (el && !el.classList.contains('is-end') && !(R3 && R3.mobile)) el._ta.focus({ preventScroll: true }); }
+  else if (RD.open) $('#rFocus').focus({ preventScroll: true });
+}
+
+/* ---- habits ---- */
+const PL = { day: null, editHabit: null, editTask: null, confirm: null };
+const planDay = () => PL.day || todayId();
+const habits = () => state.lib.habits || (state.lib.habits = []);
+const tasks = () => state.lib.tasks || (state.lib.tasks = []);
+const scheduledOn = (hb, id) => hb.days.includes(fromId(id).getDay()) && (!hb.start || id >= hb.start);
+const addDays = (id, n) => { const d = fromId(id); d.setDate(d.getDate() + n); return toId(d); };
+// Days in a row, counting back from today, on which the habit was due and done. Today only counts once it is done (it is
+// not missed until it is over); days it was not due neither break nor extend it; days before it was started do not count.
+function habitStreak(hb, today) {
+  today = today || todayId(); let n = 0;
+  for (let id = today, i = 0; i < 3700; i++, id = addDays(id, -1)) {
+    if (hb.start && id < hb.start) break;
+    if (!hb.days.includes(fromId(id).getDay())) continue;
+    if (hb.done[id]) n++; else if (id !== today) break;
+  }
+  return n;
+}
+const DAY_LETTERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'], WEEK = [1, 2, 3, 4, 5, 6, 0];
+const scheduleText = days => days.length === 7 ? 'Every day' : days.join() === '1,2,3,4,5' ? 'Weekdays' : days.join() === '0,6' ? 'Weekends' : WEEK.filter(d => days.includes(d)).map(d => DAY_LETTERS[d]).join(' ');
+function setHabitDone(hb, id, on) { if (id > todayId()) return; if (on) hb.done[id] = true; else delete hb.done[id]; saveLib(); renderToday(); }
+function dayChips(sel, onChange) {
+  return h('div', { class: 'chips', role: 'group', 'aria-label': 'Days' }, WEEK.map(d => h('button', { type: 'button', class: 'chip sm', 'aria-pressed': sel.includes(d) ? 'true' : 'false', 'aria-label': DAYS[d], onclick: e => {
+    const i = sel.indexOf(d); if (i >= 0) { if (sel.length > 1) sel.splice(i, 1); } else sel.push(d); sel.sort();
+    e.currentTarget.setAttribute('aria-pressed', sel.includes(d) ? 'true' : 'false'); if (onChange) onChange();
+  } }, DAY_LETTERS[d])));
+}
+function habitCard() {
+  const card = h('div', { class: 'card', id: 'plHabits' }, h('h3', { text: 'Habits' }));
+  const day = planDay(), future = day > todayId();
+  if (!habits().length) card.append(h('p', { class: 'note', text: 'Nothing to track yet. Add something small you want to do regularly, like “Read 10 pages”.' }));
+  habits().forEach(hb => {
+    if (PL.editHabit === hb.id) { card.append(habitEditor(hb)); return; }
+    const due = scheduledOn(hb, day), done = !!hb.done[day], streak = habitStreak(hb);
+    const strip = h('div', { class: 'pl-strip', 'aria-label': 'Last 14 days' });
+    for (let i = 13; i >= 0; i--) {
+      const id = addDays(todayId(), -i), s = scheduledOn(hb, id) ? (hb.done[id] ? 'done' : id === todayId() ? 'open' : 'missed') : 'off';
+      strip.append(h('i', { class: s, title: shortDate(id) + ': ' + { done: 'done', open: 'not yet', missed: 'missed', off: 'not due' }[s] }));
+    }
+    card.append(h('div', { class: 'pl-habit' },
+      h('button', { type: 'button', class: 'pl-check', 'aria-pressed': done ? 'true' : 'false', disabled: !due || future, 'aria-label': (done ? 'Done: ' : 'Mark done: ') + hb.name + (due ? '' : ' (not due on this day)'), onclick: () => setHabitDone(hb, day, !done) }, done ? '✓' : ''),
+      h('span', { class: 'pl-main' }, h('b', { text: hb.name }), h('small', { text: scheduleText(hb.days) + (streak ? ' · ' + plural(streak, 'day') + ' in a row' : '') + (due ? '' : ' · not due ' + (day === todayId() ? 'today' : 'this day')) })),
+      strip,
+      h('button', { type: 'button', class: 'btn sm', 'aria-label': 'Edit ' + hb.name, onclick: () => { PL.editHabit = hb.id; PL.confirm = null; renderToday(); } }, 'Edit')));
+  });
+  if (PL.editHabit === 'new') card.append(habitEditor(null));
+  else if (habits().length < 50) card.append(h('button', { type: 'button', class: 'btn sm', id: 'plAddHabit', onclick: () => { PL.editHabit = 'new'; renderToday(); setTimeout(() => { const i = $('#plHabitName'); if (i) i.focus(); }, 0); } }, '+ Add a habit'));
+  return card;
+}
+function habitEditor(hb) {
+  const days = hb ? hb.days.slice() : [0, 1, 2, 3, 4, 5, 6];
+  const name = h('input', { class: 'inp', id: 'plHabitName', maxlength: '60', value: hb ? hb.name : '', placeholder: 'For example: Read 10 pages', 'aria-label': 'Habit name' });
+  const save = () => {
+    const v = name.value.trim(); if (!v) { name.focus(); return; }
+    if (hb) { hb.name = v; hb.days = days.slice(); }   // history stays: the days already ticked keep their dates
+    else habits().push({ id: newId('h'), name: v, days: days.slice(), start: todayId(), done: {} });
+    PL.editHabit = null; saveLib(); renderToday();
+  };
+  name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); save(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); PL.editHabit = null; renderToday(); } });
+  const box = h('div', { class: 'confirm pl-edit' }, name, h('p', { class: 'note', text: 'Due on' }), dayChips(days));
+  if (hb && PL.confirm === 'habit:' + hb.id) box.append(h('p', null, h('b', { text: 'Delete “' + hb.name + '”? ' }), 'Its ticks go with it.'), h('div', { class: 'row' },
+    h('button', { type: 'button', class: 'btn sm danger solid', onclick: () => { state.lib.habits = habits().filter(x => x !== hb); PL.editHabit = null; PL.confirm = null; saveLib(); renderToday(); } }, 'Delete habit'),
+    h('button', { type: 'button', class: 'btn sm', onclick: () => { PL.confirm = null; renderToday(); } }, 'Keep it')));
+  else box.append(h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn sm solid', onclick: save }, hb ? 'Save' : 'Add habit'),
+    h('button', { type: 'button', class: 'btn sm', onclick: () => { PL.editHabit = null; renderToday(); } }, 'Cancel'),
+    hb ? h('button', { type: 'button', class: 'btn sm danger', onclick: () => { PL.confirm = 'habit:' + hb.id; renderToday(); } }, 'Delete…') : null));
+  return box;
+}
+
+/* ---- tasks ---- */
+function addTask(text, day) { text = (text || '').trim().slice(0, 200); if (!text) return null; const t = { id: newId('t'), text, date: day, done: false, created: Date.now(), link: null, from: '' }; tasks().push(t); saveLib(); return t; }
+// unfinished tasks from days before today; moving them changes their date (no copies, so nothing is doubled)
+const overdue = () => tasks().filter(t => !t.done && t.date < todayId());
+function carryForward() { const list = overdue(), t = todayId(); list.forEach(x => { if (!x.from) x.from = x.date; x.date = t; }); if (list.length) { saveLib(); toast(plural(list.length, 'unfinished task') + ' moved to today.'); } renderToday(); return list.length; }
+const pagesOn = day => writtenPages().filter(p => p.date === day && jById(p.j)).sort((a, b) => a.j < b.j ? -1 : a.j > b.j ? 1 : a.n - b.n);
+function taskCard() {
+  const day = planDay(), list = tasks().filter(t => t.date === day), done = list.filter(t => t.done).length;
+  const card = h('div', { class: 'card', id: 'plTasks' }, h('h3', { text: 'Tasks' }), list.length ? h('p', { class: 'note', id: 'plTaskCount', text: done + ' of ' + list.length + ' done' }) : null);
+  const late = day === todayId() ? overdue() : [];
+  if (late.length) card.append(h('div', { class: 'confirm' }, h('p', { text: plural(late.length, 'unfinished task') + ' from earlier days: ' + late.slice(0, 3).map(t => t.text).join(', ') + (late.length > 3 ? '…' : '') }),
+    h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn sm solid', id: 'plCarry', onclick: carryForward }, 'Move them to today'))));
+  const ul = h('ul', { class: 'pl-tasks' });
+  list.forEach(t => {
+    if (PL.editTask === t.id) {
+      const inp = h('input', { class: 'inp', maxlength: '200', value: t.text, 'aria-label': 'Task' });
+      const save = () => { const v = inp.value.trim(); if (v) t.text = v; PL.editTask = null; saveLib(); renderToday(); };
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); save(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); PL.editTask = null; renderToday(); } });
+      const pages = pagesOn(t.date), sel = h('select', { class: 'inp', 'aria-label': 'Link to a page' }, h('option', { value: '', text: 'No linked page' }),
+        pages.map(p => h('option', { value: p.j + '~' + p.n, text: jById(p.j).title + ' · page ' + p.n })));
+      sel.value = t.link ? t.link.j + '~' + t.link.n : '';
+      if (sel.value === '' && t.link) sel.append(h('option', { value: t.link.j + '~' + t.link.n, text: 'Current link (that page is gone)', selected: true }));
+      sel.addEventListener('change', () => { const m = sel.value.split('~'); t.link = sel.value ? { j: m[0], n: +m[1] } : null; });
+      ul.append(h('li', { class: 'pl-task editing' }, h('div', { class: 'confirm pl-edit' }, inp, pages.length || t.link ? sel : h('p', { class: 'note', text: 'Pages written on this day can be linked here.' }),
+        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn sm solid', onclick: save }, 'Save'), h('button', { type: 'button', class: 'btn sm', onclick: () => { PL.editTask = null; renderToday(); } }, 'Cancel'),
+          h('button', { type: 'button', class: 'btn sm danger', onclick: () => { state.lib.tasks = tasks().filter(x => x !== t); PL.editTask = null; saveLib(); renderToday(); toast('Task deleted.'); } }, 'Delete task')))));
+      setTimeout(() => inp.focus(), 0);
+      return;
+    }
+    const linked = t.link && state.pages.get(pageKey(t.link.j, t.link.n)) && jById(t.link.j);
+    ul.append(h('li', { class: 'pl-task' + (t.done ? ' done' : '') },
+      h('button', { type: 'button', class: 'pl-check', 'aria-pressed': t.done ? 'true' : 'false', 'aria-label': (t.done ? 'Done: ' : 'Mark done: ') + t.text, onclick: () => { t.done = !t.done; saveLib(); renderToday(); } }, t.done ? '✓' : ''),
+      h('span', { class: 'pl-main' }, h('b', { text: t.text }), t.from ? h('small', { text: 'from ' + shortDate(t.from) }) : null,
+        t.link ? (linked ? h('button', { type: 'button', class: 'pl-link', onclick: () => openJournal(t.link.j, t.link.n) }, '↗ ' + jById(t.link.j).title + ' · page ' + t.link.n) : h('small', { text: 'Linked page is gone' })) : null),
+      h('button', { type: 'button', class: 'btn sm', 'aria-label': 'Edit ' + t.text, onclick: () => { PL.editTask = t.id; renderToday(); } }, 'Edit')));
+  });
+  if (list.length) card.append(ul);
+  else card.append(h('p', { class: 'note', text: day === todayId() ? 'No tasks for today.' : 'No tasks on this day.' }));
+  const inp = h('input', { class: 'inp', id: 'plTaskIn', maxlength: '200', placeholder: day === todayId() ? 'Add a task for today' : 'Add a task for ' + shortDate(day), 'aria-label': 'New task' });
+  const add = () => { if (addTask(inp.value, day)) { renderToday(); const i = $('#plTaskIn'); if (i) i.focus(); } else inp.focus(); };
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  card.append(h('div', { class: 'row pl-add' }, inp, h('button', { type: 'button', class: 'btn sm solid', onclick: add }, 'Add')));
+  return card;
+}
+
+/* ---- daily and weekly reviews ---- */
+// Built only from what was recorded; anything not recorded is said to be not recorded, never shown as zero.
+const isReview = p => /#review\b/.test(p.text || '');
+const weekStart = id => { const d = fromId(id); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return toId(d); };
+const rangeLabel = (a, b) => shortDate(a) + ' – ' + shortDate(b);
+function writingLine(pages, days) {
+  const words = pages.reduce((n, p) => n + countWords(p.text), 0), dset = new Set(pages.map(p => p.date));
+  if (!pages.length) return '• Writing: nothing written ' + (days ? 'this week' : 'on this day') + ' yet';
+  return '• Writing: ' + (days ? 'on ' + dset.size + ' of ' + days + ' days, ' : '') + plural(pages.length, 'page') + ', ' + plural(words, 'word');
+}
+function reviewText(kind, day) {
+  const today = todayId();
+  if (kind === 'daily') {
+    const pages = pagesOn(day).filter(p => !isReview(p)), moods = pages.filter(p => p.mood).map(p => MOODS[p.mood - 1]);
+    const hs = habits().filter(hb => scheduledOn(hb, day)), ts = tasks().filter(t => t.date === day), open = ts.filter(t => !t.done);
+    const that = day === today ? 'today' : 'that day', next = day === today ? 'tomorrow' : 'the next day';
+    return ['Daily review · ' + longDate(day) + '  #review', '', 'What Daybook recorded:', writingLine(pages, 0),
+      '• Mood: ' + (moods.length ? Array.from(new Set(moods)).join(', then ') : 'not recorded'),
+      '• Habits: ' + (!habits().length ? 'none set up' : !hs.length ? 'none due' : hs.filter(hb => hb.done[day]).length + ' of ' + hs.length + ' done (' + hs.map(hb => hb.name + (hb.done[day] ? ' ✓' : ' ✗')).join(', ') + ')'),
+      '• Tasks: ' + (!ts.length ? 'none on this day' : (ts.length - open.length) + ' of ' + ts.length + ' done' + (open.length ? '; still open: ' + open.map(t => t.text).join('; ') : '')),
+      '', 'What mattered most ' + that + '?', '', '', 'What did I accomplish?', '', '', 'What remains unfinished?', '', '', 'What should I focus on ' + next + '?', '', ''].join('\n');
+  }
+  const a = weekStart(day), b = addDays(a, 6), upTo = b < today ? b : today, ndays = Math.max(1, Math.round((fromId(upTo) - fromId(a)) / 864e5) + 1);
+  const days = []; for (let id = a; id <= upTo; id = addDays(id, 1)) days.push(id);
+  const pages = writtenPages().filter(p => p.date >= a && p.date <= upTo && jById(p.j) && !isReview(p)), moods = pages.filter(p => p.mood).map(p => p.mood);
+  const ts = tasks().filter(t => t.date >= a && t.date <= b), dn = ts.filter(t => t.done);
+  const hline = habits().map(hb => { const due = days.filter(id => scheduledOn(hb, id)); return due.length ? hb.name + ' ' + due.filter(id => hb.done[id]).length + ' of ' + due.length : null; }).filter(Boolean);
+  let mood = 'not recorded this week';
+  if (moods.length) { const cnt = {}; moods.forEach(m => { cnt[m] = (cnt[m] || 0) + 1; }); const top = Object.keys(cnt).sort((x, y) => cnt[y] - cnt[x] || y - x)[0]; mood = 'recorded on ' + plural(new Set(pages.filter(p => p.mood).map(p => p.date)).size, 'day') + ', most often ' + MOODS[top - 1] + ' (average ' + (moods.reduce((s, m) => s + m, 0) / moods.length).toFixed(1) + ' of 5)'; }
+  return ['Weekly review · ' + rangeLabel(a, b) + '  #review', '', 'What Daybook recorded' + (upTo < b ? ' so far (' + plural(ndays, 'day') + ')' : '') + ':', writingLine(pages, ndays),
+    '• Mood: ' + mood,
+    '• Habits: ' + (!habits().length ? 'none set up' : hline.length ? hline.join(' · ') : 'none due'),
+    '• Tasks: ' + (!ts.length ? 'none this week' : dn.length + ' of ' + ts.length + ' done'), dn.length ? '• Done: ' + dn.map(t => t.text).join('; ') : null,
+    '', 'Accomplishments', '', '', 'Lessons learned', '', '', 'Next week’s priorities', '', ''].filter(x => x !== null).join('\n');
+}
+const reviewKey = (kind, day) => kind + ':' + (kind === 'weekly' ? weekStart(day) : day);
+function reviewPage(kind, day) { const r = (state.lib.reviews || {})[reviewKey(kind, day)]; const p = r && state.pages.get(pageKey(r.j, r.n)); return r && p && (p.text || '').trim() && jById(r.j) ? r : null; }
+function reviewJournalId() { const s = S().reviewJournal; return jById(s) ? s : jById(state.lib.activeId) ? state.lib.activeId : (state.lib.journals[0] || {}).id; }
+// Opens the review if there is one; otherwise writes the draft on the first unused page after the journal's last written
+// page (never over anything) and opens it there to be edited.
+function startReview(kind, day) {
+  const have = reviewPage(kind, day);
+  if (have) { toRoom(); closeDrawer(); openJournal(have.j, have.n); return have; }
+  const jid = reviewJournalId(), j = jById(jid); if (!j) { toast('Design a journal first, then start a review in it.'); return null; }
+  let last = 0; for (const p of state.pages.values()) if (p.j === jid && !pageIsEmpty(p) && p.n > last) last = p.n;
+  const n = last + 1; if (n > MAX_PAGES) { toast(j.title + ' is full. Choose another journal for reviews.'); return null; }
+  const key = pageKey(jid, n), p = { j: jid, n, text: reviewText(kind, day), date: day, mood: 0, updatedAt: Date.now() };
+  state.pages.set(key, p); savePage(key, true);
+  if (n > j.pages) j.pages = n;
+  if (!state.lib.reviews) state.lib.reviews = {};
+  state.lib.reviews[reviewKey(kind, day)] = { j: jid, n }; saveLib();
+  toRoom(); closeDrawer(); openJournal(jid, n);
+  toast((kind === 'daily' ? 'Daily' : 'Weekly') + ' review started on page ' + n + ' of ' + j.title + '.');
+  return { j: jid, n };
+}
+function reviewCard() {
+  const day = planDay(), card = h('div', { class: 'card', id: 'plReviews' }, h('h3', { text: 'Reviews' }));
+  const row = (kind, label) => { const r = reviewPage(kind, day); return h('div', { class: 'pl-review' }, h('span', { class: 'pl-main' }, h('b', { text: label }), h('small', { text: r ? 'On page ' + r.n + ' of ' + jById(r.j).title : 'A page with what was recorded, and questions to answer' })),
+    h('button', { type: 'button', class: 'btn sm' + (r ? '' : ' solid'), id: kind === 'daily' ? 'plDaily' : 'plWeekly', onclick: () => startReview(kind, day) }, r ? 'Open' : 'Start')); };
+  card.append(row('daily', 'Daily review · ' + (day === todayId() ? 'today' : shortDate(day))), row('weekly', 'Weekly review · ' + rangeLabel(weekStart(day), addDays(weekStart(day), 6))));
+  if (state.lib.journals.length > 1) {
+    const sel = h('select', { class: 'inp', id: 'plReviewJournal', 'aria-label': 'Journal for new reviews' }, state.lib.journals.map(j => h('option', { value: j.id, text: j.title })));
+    sel.value = reviewJournalId(); sel.addEventListener('change', () => { state.lib.settings.reviewJournal = sel.value; saveLib(); });
+    card.append(h('label', { class: 'pl-field' }, h('span', { class: 'note', text: 'New reviews go in' }), sel));
+  }
+  return card;
+}
+
+/* ---- the Today tab ---- */
+function tabToday(body) {
+  const day = planDay(), today = todayId();
+  const go = n => { PL.day = addDays(day, n); PL.editHabit = PL.editTask = PL.confirm = null; renderToday(); };
+  body.append(h('div', { class: 'pl-day' },
+    h('button', { type: 'button', class: 'btn sm', 'aria-label': 'Previous day', onclick: () => go(-1) }, '‹'),
+    h('b', { id: 'plDate', text: day === today ? 'Today · ' + shortDate(day) : longDate(day) }),
+    h('button', { type: 'button', class: 'btn sm', 'aria-label': 'Next day', onclick: () => go(1) }, '›'),
+    day !== today ? h('button', { type: 'button', class: 'btn sm', onclick: () => { PL.day = null; renderToday(); } }, 'Today') : null));
+  body.append(habitCard(), taskCard(), reviewCard());
+}
+function renderToday() { if (LB.tab === 'today' && !$('#drawer').hidden) { const sc = $('#drBody').scrollTop; renderDrawer(); $('#drBody').scrollTop = sc; } }
+
+/* ---- unsaved writing found on load ---- */
+function offerDrafts() {
+  if (isLocked()) { const lk = $('#lock'), mo = new MutationObserver(() => { if (lk.hidden) { mo.disconnect(); offerDrafts(); } }); mo.observe(lk, { attributes: true, attributeFilter: ['hidden'] }); return; }   // never show writing before the PIN
+  const list = pendingDrafts(); if (!list.length || $('#recover')) return;
+  const opener = document.activeElement, rows = h('div', { class: 'rc-list' });
+  const box = h('div', { class: 'modal', id: 'recover', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rcvTitle' },
+    h('div', { class: 'panel recover' }, h('header', { class: 'm-head' }, h('h2', { id: 'rcvTitle', text: 'Unsaved writing found' })),
+      h('div', { class: 'w-body' }, h('p', { class: 'note', text: 'This writing had not been saved when Daybook last closed in this tab. Choose what to keep for each page. Nothing changes until you do.' }), rows),
+      h('footer', { class: 'm-foot' }, h('button', { type: 'button', class: 'btn', id: 'rcvLater', onclick: () => close() }, 'Decide later'))));
+  const close = () => { box.remove(); giveFocusBack(opener); };
+  const ex = t => { const s = (t || '').replace(/\s+/g, ' ').trim(); return s ? '“' + s.slice(0, 160) + (s.length > 160 ? '…' : '') + '”' : '(empty)'; };
+  const done = (row, msg) => { row.replaceWith(h('p', { class: 'note', text: msg })); if (!rows.querySelector('.rc-item')) setTimeout(close, 900); };
+  list.forEach(d => {
+    const j = jById(d.j), when = new Date(d.draft.at || Date.now()).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+    const row = h('div', { class: 'confirm rc-item' },
+      h('p', null, h('b', { text: (j ? j.title : 'A journal that is gone') + ' · page ' + d.n }), ' · written ' + when),
+      h('p', { text: 'Recovered: ' + ex(d.draft.text) }), h('p', { class: 'note', text: 'Saved now: ' + (d.saved ? ex(d.saved.text) : 'nothing on this page') }));
+    if (d.conflict) row.append(h('p', { class: 'note bk-msg', text: 'This page was saved again after this writing (perhaps in another tab). Restoring replaces that saved text.' }));
+    const keep = h('button', { type: 'button', class: 'btn sm', onclick: () => { dropDraft(d.key); done(row, 'Kept the saved page for ' + (j ? j.title : 'that journal') + ', page ' + d.n + '.'); } }, 'Keep the saved page');
+    row.append(h('div', { class: 'row' }, j ? h('button', { type: 'button', class: 'btn sm solid', onclick: () => { useDraft(d); done(row, 'Restored ' + j.title + ', page ' + d.n + '.'); } }, 'Restore this writing') : null, keep));
+    rows.append(row);
+  });
+  box.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } else trapFocus(box, e); });
+  document.body.append(box); box.querySelector('.rc-item button').focus();
+}
+function useDraft(d) {
+  const j = jById(d.j); if (!j) return;
+  let p = state.pages.get(d.key); if (!p) { p = { j: d.j, n: d.n, text: '', date: d.draft.date || todayId(), mood: 0 }; state.pages.set(d.key, p); }
+  p.text = d.draft.text; if (d.draft.date) p.date = d.draft.date; if (d.draft.mood) p.mood = d.draft.mood; p.updatedAt = Date.now();
+  if (d.n > j.pages) { j.pages = d.n; saveLib(); }
+  savePage(d.key, true); refreshOpenUI();
+}
+
+/* =====================================================================
    Boot
    ===================================================================== */
 function genPaperTextures() {
@@ -5936,7 +6457,7 @@ function fontsReady() {
 }
 function wireUI() {
   const spread = $('#spread'); ['L', 'R'].forEach((s, i) => { const el = buildPageEl(s, i); pageEls.push(el); spread.append(el); });
-  buildLock(); bindStudio(); bindSwipe();
+  buildLock(); bindStudio(); bindSwipe(); watchDialogs();
   $('#bToday').addEventListener('click', writeToday);
   $('#bShelf').addEventListener('click', () => { if ($('#drawer').classList.contains('open')) closeDrawer(); else openDrawer(); });
   $('#bNew').addEventListener('click', () => openDesigner(null));
@@ -5970,6 +6491,8 @@ function wireUI() {
   $('#rPrev').addEventListener('click', () => turn(-1));
   $('#rNext').addEventListener('click', () => turn(1));
   $('#rDraw').addEventListener('click', () => toggleDraw());
+  $('#rFocus').addEventListener('click', () => setFocusMode(!RD.focusMode));
+  $('#rFocusExit').addEventListener('click', () => setFocusMode(false));
   $$('[data-pop]').forEach(b => b.addEventListener('click', () => openPop(b.dataset.pop)));
   $$('.s-tabs [data-st]').forEach(b => b.addEventListener('click', () => { DS.tab = b.dataset.st; if (DS.tab === 'draw' || DS.tab === 'style') DS.sel = -1; renderStudio(); }));
   $('#dClose').addEventListener('click', closeDesigner); $('#dCancel').addEventListener('click', closeDesigner);
@@ -5987,7 +6510,9 @@ function wireUI() {
   });
   document.addEventListener('keydown', e => {
     if (isLocked()) return;
-    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); flushAll(); toast('Saved.'); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openQuickNav(); return; }   // types nothing, so it is safe even on a page
+    // says Saved only once everything is stored: a save that failed is tried again, and still failing says so
+    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); flushAll().then(() => toast(unsaved() ? 'Not saved yet. Daybook keeps trying, and your writing stays on screen.' : 'Saved.')); return; }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !$('#designer').hidden && !/TEXTAREA|INPUT/.test(document.activeElement.tagName)) { e.preventDefault(); undoStudio(); return; }
     if (e.key === 'Escape') {
       if (!RD.open && cancelOpen()) return;
@@ -6002,6 +6527,7 @@ function wireUI() {
       else if (RD.drawing) toggleDraw(false);
       else if (RD.sel) { RD.sel = null; renderItemsAll(); }
       else if (RD.pop) closePop();
+      else if (RD.focusMode) setFocusMode(false);
       else if (RD.open) closeReader();
       else { closeDrawer(); closeSoundPop(); }
       return;
@@ -6068,7 +6594,7 @@ async function boot() {
     if (init.legacy && init.legacy.length) toWrite.push(...importLegacy(lib, pages, init.legacy));
     state.lib = lib; saveLib(true);
   } else state.lib = normLib(lib);
-  Object.keys(pages).forEach(k => state.pages.set(k, pages[k]));
+  Object.keys(pages).forEach(k => { state.pages.set(k, pages[k]); savedAt.set(k, pages[k].updatedAt || 0); });
   toWrite.forEach(k => queue(() => st.writePage(k, pages[k])));
   try { st.subscribe(onRemoteLib, onRemotePages, () => toast('Lost the connection to your journals. Changes on screen will retry.')); } catch (e) { /* local store */ }
   state.ready = true;
@@ -6080,8 +6606,9 @@ async function boot() {
   updateHudSub();
   $('#loader').classList.add('gone');
   if (S().pinHash) showLock();
-  checkRestored();
-  if (has3d) setHint(R3.mobile ? 'Tap a journal to take it down, then tap it on the desk to open. Drag to look around.' : 'Click a journal to take it down, then click it on the desk to open. Drag to look around.');
+  checkRestored(); offerDrafts();
+  if (has3d && !state.lib.journals.length) setHint('No journals yet. Design your first one: New journal, or Library on a phone.');   // nothing on the shelf to click
+  else if (has3d) setHint(R3.mobile ? 'Tap a journal to take it down, then tap it on the desk to open. Drag to look around.' : 'Click a journal to take it down, then click it on the desk to open. Drag to look around.');
   else { openDrawer(); fadeHint(); }
   if (!S().welcomed && !S().pinHash) setTimeout(() => showWelcome(), has3d ? 1400 : 300);
   else setTimeout(showMemory, 2200);
@@ -6099,7 +6626,8 @@ async function boot() {
     openJournal, takeDown, closeReader, writeToday,
     openDrawer, closeDrawer,
     applyRoomStyle, applySettings, sfx, toast,
-    SND, setAmbient, cycleSound, weatherMode, skyTarget
+    SND, setAmbient, cycleSound, weatherMode, skyTarget,
+    searchAll, openQuickNav, closeQuickNav, setFocusMode, habitStreak, reviewText, startReview, addTask, carryForward, pendingDrafts, offerDrafts, flushAll, unsaved
   };
 }
 boot();

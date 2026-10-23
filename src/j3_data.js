@@ -13,7 +13,7 @@ const SETTINGS_DEFAULT = {
   showClock: true, clockMode: 'analog', clockStyle: 'daybook', clockSec: true, clockTick: false,
   weather: 'clear', woodFinish: 'satin', lampStyle: 'brass', artStyle: 'quiet_focus',
   potStyle: 'terracotta', globeStyle: 'brass', radioStyle: 'wood',
-  exploreSpeed: 1.0, activePreset: 'default', customPresets: {}, objectLayout: {},
+  exploreSpeed: 1.0, activePreset: 'default', customPresets: {}, objectLayout: {}, reviewJournal: '',
   visibleObjects: { globe: true, plant: true, radio: true, cup: true, mug: true, art: true, clock: true }
 };
 
@@ -48,7 +48,37 @@ function normLib(L) {
   if (typeof settings.visibleObjects !== 'object' || settings.visibleObjects === null) {
     settings.visibleObjects = Object.assign({}, SETTINGS_DEFAULT.visibleObjects);
   }
-  return { v: 4, journals: (L.journals || []).map(normJ), activeId: L.activeId || null, settings };
+  return { v: 4, journals: (L.journals || []).map(normJ), activeId: L.activeId || null, settings, habits: normHabits(L.habits), tasks: normTasks(L.tasks), reviews: normReviews(L.reviews) };
+}
+// Habits, tasks and the review pages live in the library beside the journals, so saving, other tabs and backups carry
+// them like everything else. Stored data and backups can hold anything: keep only well-formed entries.
+const PLAN_ID = /^[\w-]{1,40}$/, DAY_ID = /^\d{4}-\d{2}-\d{2}$/;
+const isRec = v => !!v && typeof v === 'object' && !Array.isArray(v);
+const cut = (v, max) => typeof v === 'string' ? v.slice(0, max) : '';
+function normHabits(v) {
+  const out = [];
+  (Array.isArray(v) ? v : []).forEach(x => {
+    if (!isRec(x) || !PLAN_ID.test(x.id) || out.some(o => o.id === x.id) || out.length >= 50) return;
+    const days = Array.isArray(x.days) ? Array.from(new Set(x.days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6))).sort() : [];
+    const done = {}; if (isRec(x.done)) Object.keys(x.done).forEach(k => { if (DAY_ID.test(k) && x.done[k] === true) done[k] = true; });
+    out.push({ id: x.id, name: cut(x.name, 60).trim() || 'Habit', days: days.length ? days : [0, 1, 2, 3, 4, 5, 6], start: DAY_ID.test(x.start) ? x.start : '', done });
+  });
+  return out;
+}
+function normTasks(v) {
+  const out = [], ids = new Set();
+  (Array.isArray(v) ? v : []).forEach(x => {
+    if (!isRec(x) || !PLAN_ID.test(x.id) || ids.has(x.id) || !DAY_ID.test(x.date) || !cut(x.text, 200).trim() || out.length >= 5000) return;
+    ids.add(x.id);
+    const link = isRec(x.link) && /^[\w-]{1,64}$/.test(x.link.j) && Number.isInteger(x.link.n) && x.link.n >= 1 && x.link.n <= 999 ? { j: x.link.j, n: x.link.n } : null;
+    out.push({ id: x.id, text: cut(x.text, 200).trim(), date: x.date, done: x.done === true, created: +x.created || 0, link, from: DAY_ID.test(x.from) ? x.from : '' });
+  });
+  return out;
+}
+function normReviews(v) {
+  const out = {};
+  if (isRec(v)) Object.keys(v).forEach(k => { const r = v[k]; if (/^(daily|weekly):\d{4}-\d{2}-\d{2}$/.test(k) && isRec(r) && /^[\w-]{1,64}$/.test(r.j) && Number.isInteger(r.n) && r.n >= 1 && r.n <= 999) out[k] = { j: r.j, n: r.n }; });
+  return out;
 }
 function defaultLib() {
   const yr = String(new Date().getFullYear());
@@ -179,8 +209,11 @@ function importLegacy(lib, pages, legacy) {
   return keys;
 }
 
-let libTimer = null, libInflight = 0, chain = Promise.resolve(), saveErrShown = false;
+let libTimer = null, libInflight = 0, libFailed = false, chain = Promise.resolve(), saveErrShown = false;
 function setSaveState(t) { const el = $('#rStatus'); if (el) el.textContent = t; }
+// "Saved" only once nothing is waiting and nothing failed: one page saving must not hide another that could not be stored
+function refreshSaveState() { if (pageTimers.size || libTimer || libInflight) setSaveState('Saving…'); else if (dirtyPages.size || libFailed) setSaveState('Not saved yet'); else setSaveState('Saved'); }
+const unsaved = () => dirtyPages.size > 0 || libFailed;
 function queue(fn) {
   chain = chain.then(fn).catch(e => {
     setSaveState('Not saved yet');
@@ -196,7 +229,10 @@ function restoredElsewhere() {
 function saveLib(now) {
   clearTimeout(libTimer);
   if (state.restoring) return;   // a restored backup is being written; the old state must not be saved over it
-  const run = () => { libTimer = null; libInflight++; const snap = clone(state.lib); return queue(() => state.store.writeLib(snap)).then(() => { libInflight--; }); };
+  const run = () => {
+    libTimer = null; libInflight++; const snap = clone(state.lib);
+    return queue(async () => { try { await state.store.writeLib(snap); libFailed = false; } catch (e) { libFailed = true; throw e; } }).then(() => { libInflight--; refreshSaveState(); });
+  };
   if (now) return run();
   libTimer = setTimeout(run, 350);
 }
@@ -205,7 +241,7 @@ function pageIsEmpty(p) { return !p || (!(p.text || '').trim() && !p.mood && !p.
 function savePage(key, now) {
   if (state.restoring) return;
   dirtyPages.add(key); editSeq.set(key, (editSeq.get(key) || 0) + 1);
-  setSaveState('Saving…');
+  setSaveState('Saving…'); keepDraft(key);
   clearTimeout(pageTimers.get(key));
   if (now) return flushPage(key);
   pageTimers.set(key, setTimeout(() => flushPage(key), 700));
@@ -221,11 +257,43 @@ function flushPage(key) {
   if (empty) state.pages.delete(key);
   return queue(async () => {
     await state.store.writePage(key, data);
-    if (editSeq.get(key) === seq) dirtyPages.delete(key);
-    if (!pageTimers.size) setSaveState('Saved');
+    if (data) savedAt.set(key, data.updatedAt || 0); else savedAt.delete(key);
+    if (editSeq.get(key) === seq) { dirtyPages.delete(key); dropDraft(key); }
+    refreshSaveState();
   });
 }
-function flushAll() { for (const k of Array.from(pageTimers.keys())) flushPage(k); if (libTimer) saveLib(true); return chain; }
+// everything waiting, and everything that failed before (it is tried again rather than left until the next change)
+function flushAll() { for (const k of new Set([...pageTimers.keys(), ...dirtyPages])) flushPage(k); if (libTimer || libFailed) saveLib(true); return chain; }
+
+/* ---- drafts: unsaved writing kept per tab, so a failed save or a crash does not lose it ---- */
+// sessionStorage: it survives a reload of this tab, has its own room when localStorage is full, and other tabs cannot
+// see it (they would otherwise offer to "recover" text this tab is still typing). Text, date and mood only.
+const DRAFT = 'daybook3d:draft:', savedAt = new Map(), draftTimers = new Map();
+const draftStore = () => { try { return window.sessionStorage; } catch (e) { return null; } };
+function keepDraft(key) {
+  clearTimeout(draftTimers.get(key));
+  draftTimers.set(key, setTimeout(() => {
+    draftTimers.delete(key); const p = state.pages.get(key), s = draftStore(); if (!s || !dirtyPages.has(key)) return;
+    try { s.setItem(DRAFT + key, JSON.stringify({ text: p ? p.text || '' : '', date: p ? p.date || '' : '', mood: p ? p.mood || 0 : 0, base: savedAt.get(key) || 0, at: Date.now() })); } catch (e) { /* no room: the page itself may still save */ }
+  }, 250));
+}
+function dropDraft(key) { clearTimeout(draftTimers.get(key)); draftTimers.delete(key); const s = draftStore(); try { if (s) s.removeItem(DRAFT + key); } catch (e) { /* ignore */ } }
+function dropAllDrafts() { const s = draftStore(); try { if (s) Object.keys(s).filter(k => k.indexOf(DRAFT) === 0).forEach(k => s.removeItem(k)); } catch (e) { /* ignore */ } }
+// drafts left by an earlier load of this tab whose writing never reached storage; ones already saved are dropped quietly
+function pendingDrafts() {
+  const s = draftStore(), out = []; if (!s) return out;
+  let keys = []; try { keys = Object.keys(s).filter(k => k.indexOf(DRAFT) === 0); } catch (e) { return out; }
+  for (const k of keys) {
+    const key = k.slice(DRAFT.length), m = /^([\w-]{1,64})~(\d{1,3})$/.exec(key); let d = null;
+    try { d = JSON.parse(s.getItem(k)); } catch (e) { /* unreadable */ }
+    if (!m || !d || typeof d.text !== 'string') { dropDraft(key); continue; }
+    const p = state.pages.get(key);
+    if (p && (p.text || '') === d.text) { dropDraft(key); continue; }   // it did get saved
+    if (!p && !d.text.trim()) { dropDraft(key); continue; }
+    out.push({ key, j: m[1], n: +m[2], draft: d, saved: p || null, conflict: (p ? p.updatedAt || 0 : 0) !== (d.base || 0) });
+  }
+  return out;
+}
 
 function onRemoteLib(data) {
   if (libTimer || libInflight) return;
@@ -234,7 +302,7 @@ function onRemoteLib(data) {
 }
 function onRemotePages(m) {
   const seen = new Set(Object.keys(m));
-  for (const k of seen) { if (!dirtyPages.has(k)) state.pages.set(k, clone(m[k])); }
+  for (const k of seen) { if (!dirtyPages.has(k)) { state.pages.set(k, clone(m[k])); savedAt.set(k, m[k].updatedAt || 0); } }
   for (const k of Array.from(state.pages.keys())) { if (!seen.has(k) && !dirtyPages.has(k)) state.pages.delete(k); }
   refreshOpenUI();
 }

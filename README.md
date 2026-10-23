@@ -2,6 +2,8 @@
 
 **A journal you write in inside a quiet 3D study.**
 
+**Try it:** <https://awaneesh03.github.io/DayBook/>
+
 Daybook is a journaling app in a single web page. You sit at a desk in a rendered study with a lamp, a window onto the
 city and a shelf of journals. Take a journal down, open it, and write with a fountain pen, a pencil or a typewriter while
 the ink appears as you type. Around the writing are small, practical tools: search across every journal, habits, tasks,
@@ -67,6 +69,12 @@ and no tracking: your journals stay in your browser.
 | **Focus writing** | |
 
 The screenshots show made-up demo content.
+
+## Live demo
+
+<https://awaneesh03.github.io/DayBook/> is this repository's `main` branch, served by GitHub Pages. It is the same single
+page: journals you write there are stored in your own browser for that address, and nothing is sent to a server.
+Clearing the site's data erases them, so export a full backup now and then.
 
 ## Run it locally
 

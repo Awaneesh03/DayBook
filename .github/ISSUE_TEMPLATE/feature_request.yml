@@ -1,0 +1,17 @@
+name: Feature request
+description: Suggest an improvement to Daybook.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would it help with?
+      description: The problem or the moment in your writing routine this is for.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true

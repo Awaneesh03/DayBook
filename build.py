@@ -21,7 +21,8 @@ def build():
 
     output = (
         p1 + p2 + p3 +
-        '\n<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>\n' +
+        # integrity: the browser refuses the file if the CDN ever serves anything but three.js r128 (hash from cdnjs)
+        '\n<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" integrity="sha512-dLxUelApnYxpLt6K2iomGngnHO83iUvZytA3YjDUCjT0HDOHKXnVYdf3hU4JjM8uEhxf9nD1/ey98U3t2vZ0qQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>\n' +
         '<script>\n(function () {\n\'use strict\';\n' +
         js_content +
         '\n})();\n</script>\n'

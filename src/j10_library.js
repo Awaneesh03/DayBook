@@ -2,7 +2,9 @@
    Library: journals, calendar, insights, settings
    ===================================================================== */
 const LB = { tab: 'journals', calY: new Date().getFullYear(), calM: new Date().getMonth(), calSel: null, pinStep: null };
-function openDrawer(tab) { if (isLocked()) return; closeSoundPop(); hideMemory(); const dr = $('#drawer'); if (tab) LB.tab = tab; dr.hidden = false; renderDrawer(); requestAnimationFrame(() => dr.classList.add('open')); fadeHint(); }
+// 'open' is added at once after a reflow (the slide still plays): from a later frame it came many seconds late on slow
+// devices, after the room's first heavy frames, and then undid an Escape that had already closed the library
+function openDrawer(tab) { if (isLocked()) return; closeSoundPop(); hideMemory(); const dr = $('#drawer'); if (tab) LB.tab = tab; dr.hidden = false; renderDrawer(); void dr.offsetWidth; dr.classList.add('open'); fadeHint(); }
 function closeDrawer() { if (document.body.classList.contains('no3d')) return; const dr = $('#drawer'); dr.classList.remove('open'); setTimeout(() => { if (!dr.classList.contains('open')) dr.hidden = true; }, 450); }
 // (not under a field being typed in: a save from another tab must not wipe a half-typed task or habit)
 function renderDrawerSoft() { const a = document.activeElement; if (a && a.closest && a.closest('#drBody') && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && a.id !== 'drSearch') return; if (LB.tab === 'journals') { renderJournalList(); renderSearch(); } else if (LB.tab !== 'settings') renderDrawer(); }

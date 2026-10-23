@@ -94,7 +94,7 @@ await test('journaling works with the keyboard alone: write, plan a task, tick i
   await page.keyboard.press('Space');
   await page.waitForFunction(() => Daybook.state.lib.tasks[0] && Daybook.state.lib.tasks[0].done, null, { timeout: 20000 }).catch(() => { throw new Error('Space did not tick the task'); });
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.querySelector('#drawer').hidden, null, { timeout: 20000 }).catch(() => { throw new Error('Escape did not close the library'); });
+  await page.waitForFunction(() => document.querySelector('#drawer').hidden, null, { timeout: 20000 }).catch(async () => { throw new Error('Escape did not close the library: ' + JSON.stringify(await page.evaluate(() => ({ drawer: document.querySelector('#drawer').className + (document.querySelector('#drawer').hidden ? ' hidden' : ''), active: document.activeElement.outerHTML.slice(0, 70), cam: Daybook.R3.cam.mode, tour: Daybook.TOUR.active, peek: Daybook.PEEK.active, welcome: !document.querySelector('#welcome').hidden, designer: !document.querySelector('#designer').hidden, custom: !document.querySelector('#roomCustomModal').hidden, roomPop: !document.querySelector('#roomActionPop').hidden, arrange: !!(Daybook.R3.arrange && Daybook.R3.arrange.active), reader: !document.querySelector('#reader').hidden, focus: document.querySelector('#reader').classList.contains('focus') })))); });
   ok(await page.evaluate(() => [...Daybook.state.pages.values()].some(p => /Written without a mouse\./.test(p.text))), 'the writing was not kept');
 });
 
